@@ -1,0 +1,53 @@
+# BookSwap 專案根目錄 .gitignore
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+package-lock.json
+
+# 環境變數文件
+#.env
+#.env.local
+#.env*.local
+
+# IDE 和編輯器
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# 作業系統
+Thumbs.db
+desktop.ini
+
+# 日誌文件
+*.log
+logs/
+
+# 臨時文件
+*.tmp
+*.temp
+.cache/
+
+# Next.js (apps/web)
+apps/web/.next/
+apps/web/out/
+apps/web/build
+apps/web/.vercel
+apps/web/*.tsbuildinfo
+apps/web/next-env.d.ts
+
+# 測試覆蓋率
+coverage/
+.nyc_output/
+
+# 其他
+*.pem
+dist/
+build/
+
