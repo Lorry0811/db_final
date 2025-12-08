@@ -13,6 +13,21 @@
 % 引入 hyperref 套件
 \usepackage{hyperref}
 
+\usepackage{listings}
+\usepackage{xcolor}
+
+\lstset{
+    basicstyle=\ttfamily\footnotesize, % 字體
+    numbers=left,                      % 行號
+    numberstyle=\tiny,
+    keywordstyle=\color{blue},
+    commentstyle=\color{green!50!black},
+    stringstyle=\color{red!60!black},
+    breaklines=true,                   % 自動換行
+    frame=single                       % 外框
+}
+
+
 % 設定連結樣式 (建議加上這段，不然預設會有醜醜的紅框)
 \hypersetup{
     colorlinks=true,    % 使用顏色來標示連結 (設為 false 則會有方框)
@@ -157,6 +172,185 @@ BCNF。
 
 \subsection{重要功能及對應的 SQL 指令}
 \subsection{SQL 指令效能優化與索引建立分析}
+\subsubsection{User 表索引}
+我們觀察到系統中最頻繁的操作之一是與使用者相關的查詢，例如登入驗證、判斷帳號是否為管理員、篩選遭封鎖的用戶等。由於 email 與 username 是辨識使用者身分的重要欄位，且在註冊、登入與權限驗證流程中會被大量使用，因此若每次查詢都需在資料表逐筆比對，勢必造成效能負擔。
+
+此外，is\_admin 與 is\_blocked 這兩個欄位經常被用於篩選條件，例如後台管理需要快速定位管理員帳號，或系統需要查詢遭封禁的使用者狀態。若無索引輔助，資料庫必須進行全表掃描 (Full Table Scan)，在使用者數量成長後，將會造成明顯延遲。
+
+因此，為提升查詢效率，我們在 user 表中針對 email、username、is\_admin 與 is\_blocked 建立索引，以加快系統在使用者查詢行為中的回應速度。其語法如下。
+
+\begin{lstlisting}[language=SQL]
+CREATE INDEX IF NOT EXISTS idx_user_email
+ON "user"(email);
+
+CREATE INDEX IF NOT EXISTS idx_user_username
+ON "user"(username);
+
+CREATE INDEX IF NOT EXISTS idx_user_is_admin
+ON "user"(is_admin);
+
+CREATE INDEX IF NOT EXISTS idx_user_is_blocked
+ON "user"(is_blocked);
+\end{lstlisting}
+上述索引的建立，使常見查詢如「搜尋 E-mail 是否已註冊」、「驗證使用者名稱是否合法」、「取得所有管理員帳號」與「查詢封鎖用戶」能夠避免全表掃描，提升資料檢索效率，並強化系統的使用體驗與可擴展性。
+
+\subsubsection{Posting 表索引}
+在系統的運作流程中，posting 資料表扮演核心角色，包含貼文內容、分類、價格、課程代碼與貼文建立時間等資訊。由於平台上的貼文瀏覽、篩選與搜尋操作頻繁，若每次查詢皆需逐筆比對，將造成系統效能下降。因此，我們決定針對常用查詢欄位建立索引，以提高查詢速度。
+
+其中，u\_id 會用於取得使用者的所有貼文；status 會頻繁用於顯示有效貼文或過期貼文的篩選；class\_id 與 course\_id 則有助於快速查詢特定課程或分類下的貼文內容。price 與 created\_at 亦為排序及篩選熱門或最新貼文時不可或缺的條件，因此透過索引，我們可以有效降低查詢時間。
+
+除了以上欄位索引外，我們亦為 title 與 description 建立全文搜尋 (Full Text Search) 索引，使用 PostgreSQL GIN + Tsvector 技術，以提升關鍵字搜尋效率與回傳精準度，使使用者能夠快速找到符合需求的貼文內容。
+
+其語法如下。
+
+\begin{lstlisting}[language=SQL]
+-- Posting 表索引
+CREATE INDEX IF NOT EXISTS idx_posting_u_id ON posting(u_id);
+CREATE INDEX IF NOT EXISTS idx_posting_status ON posting(status);
+CREATE INDEX IF NOT EXISTS idx_posting_class_id ON posting(class_id);
+CREATE INDEX IF NOT EXISTS idx_posting_course_id ON posting(course_id);
+CREATE INDEX IF NOT EXISTS idx_posting_price ON posting(price);
+CREATE INDEX IF NOT EXISTS idx_posting_created_at ON posting(created_at);
+
+-- 全文搜尋索引（PostgreSQL）
+CREATE INDEX IF NOT EXISTS idx_posting_title_search 
+ON posting USING gin(to_tsvector('english', title));
+
+CREATE INDEX IF NOT EXISTS idx_posting_description_search 
+ON posting USING gin(to_tsvector('english', description));
+
+\end{lstlisting}
+
+透過此索引設計，系統能夠在貼文數量增加時仍維持快速回應，特別是篩選搜尋、課程查詢、價格排序與全文關鍵字查詢皆大幅提升效能，有助於貼文瀏覽與交易流程更加順暢。
+
+\subsubsection{Comment 表索引}
+在互動功能中，留言系統是使用者參與貼文內容的重要環節，comment 資料表則用於儲存各篇貼文的留言紀錄。為了確保系統能夠即時顯示留言、查詢特定貼文相關的討論內容，我們針對常用的查詢條件進行索引設計。
+
+其中，p\_id (貼文編號) 是最常用來查詢留言的條件，系統在顯示貼文下方留言時會頻繁依據此欄位提取資料，因此建立索引能有效降低 Full Table Scan 的成本。同時，u\_id 可加速查詢某位使用者留下的所有留言，例如顯示個人留言記錄或追蹤違規帳號留言行為。至於 created\_at 則常作為排序依據（最新留言在前），亦有助於以時間維度讀取留言串的效能。
+
+其語法如下。
+\begin{lstlisting}[language=SQL]
+CREATE INDEX IF NOT EXISTS idx_comment_p_id ON comment(p_id);
+CREATE INDEX IF NOT EXISTS idx_comment_u_id ON comment(u_id);
+CREATE INDEX IF NOT EXISTS idx_comment_created_at ON comment(created_at);
+
+\end{lstlisting}
+
+透過此索引設置，系統在讀取留言串、顯示討論內容、回朔使用者留言紀錄時皆能更快速回應，並確保在留言數增加的情況下仍具備高擴充性與良好使用體驗。
+
+\subsubsection{Report 表索引}
+在檢舉與審核流程中，report 資料表負責儲存使用者針對貼文所提報的違規紀錄，因此查詢效率直接影響到審核速度與管理端的使用體驗。由於平台在運作過程中，管理者會大量針對檢舉紀錄進行查詢、篩選與排序，我們在設計上對常用查詢欄位建立索引，以強化系統在多筆檢舉情況下的效能。
+
+其中，reporter\_id 主要用於追蹤同一位使用者提出的所有檢舉行為，可協助判斷是否存在濫用申訴或重複檢舉。p\_id 則對應貼文本身，可加速取得某則貼文涉及的所有檢舉事件，特別是熱門貼文被大量舉報時更能有效減少查詢負擔。status 為審查狀態，建立索引後可快速篩選未處理、通過或駁回的案件，大幅提升後台審核流程效率。而 created\_at 則讓系統能依時間排序與取得最新檢舉紀錄，對時序分析與審核排序十分關鍵。
+
+\begin{lstlisting}[language=SQL]
+CREATE INDEX IF NOT EXISTS idx_report_reporter_id ON report(reporter_id);
+CREATE INDEX IF NOT EXISTS idx_report_p_id ON report(p_id);
+CREATE INDEX IF NOT EXISTS idx_report_status ON report(status);
+CREATE INDEX IF NOT EXISTS idx_report_created_at ON report(created_at);
+\end{lstlisting}
+
+透過上述索引設計，後台管理者能更快速定位檢舉來源、查詢涉及問題的貼文、掌握處理進度並依時間排序案件，使審核流程具備更高反應速度與可處理上限，在資料量增加時亦保持良好延展性。
+
+\subsubsection{Orders 表索引}
+在交易流程設計中，orders 資料表負責紀錄使用者之間的交易訂單資訊，包含購買者、對應貼文、訂單狀態與下單時間等欄位。由於訂單查詢是整體系統運作的重要核心，例如買家查看訂單紀錄、賣家確認商品是否售出、後台篩選訂單狀態等場景都會大量依賴此資料表，因此若無索引輔助，在訂單數量增加後將出現顯著查詢延遲。
+
+其中，buyer\_id 用於取得某位使用者的購買紀錄，使平台能快速顯示歷史訂單、評價來源或交易分析結果。p\_id 則對應 posting，可快速確認某篇貼文所產生的所有訂單，有助於追蹤熱門貼文的交易量。status 常用於後台審核與訂單處理，如顯示已完成、待付款或已取消的訂單狀態，索引能使篩選條件查詢更流暢。最後，order\_date 使系統能快速依時間排序訂單，在報表生成、營運分析與近期交易查詢中具有重要作用。
+
+索引建立語法如下。
+
+\begin{lstlisting}[language=SQL]
+CREATE INDEX IF NOT EXISTS idx_orders_buyer_id ON orders(buyer_id);
+CREATE INDEX IF NOT EXISTS idx_orders_p_id ON orders(p_id);
+CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
+CREATE INDEX IF NOT EXISTS idx_orders_order_date ON orders(order_date);
+\end{lstlisting}
+透過以上索引配置，系統能在訂單量成長後仍保持查詢效率，包含查詢購買紀錄、對應貼文之訂單、依狀態分類訂單處理、以及依時間排序交易資料，都能顯著降低查詢延遲，確保交易流程與後台統計分析運作順暢。
+
+\subsubsection{Transaction Record 表索引}
+在平台金流與點數制度中，transaction\_record 表用於儲存使用者的錢包交易紀錄，包含轉入、扣款、退款、購買等不同類型的金流行為。由於此資料與訂單、貼文交易、錢包餘額顯示等功能密切相關，交易紀錄的快速查詢對整體使用體驗與後台審計都具有關鍵影響。因此，我們針對常用查詢條件建立索引，以確保金流紀錄在長期使用下仍能維持高效運作。
+
+其中，u\_id 是最常用的查詢欄位，用於取得某位使用者的所有錢包紀錄，例如顯示充值紀錄、消費歷史或違規退款事件；建立索引後，可顯著加速此類查詢需求。trans\_type 則用於類型識別，方便後台統計特定交易類型的發生次數，如統計每日扣款量、每日充值量等，索引可提升分類查詢的效率。trans\_time 則非常適合用於時間排序與報表分析，當需取得近期交易或回朔歷史紀錄時，有索引的情況下可避免進行全表掃描，使查詢更具延展性。
+
+建立索引之 SQL 如下所示：
+\begin{lstlisting}[language=SQL]
+CREATE INDEX IF NOT EXISTS idx_transaction_u_id ON transaction_record(u_id);
+CREATE INDEX IF NOT EXISTS idx_transaction_trans_type ON transaction_record(trans_type);
+CREATE INDEX IF NOT EXISTS idx_transaction_trans_time ON transaction_record(trans_time);
+\end{lstlisting}
+透過以上索引設計，交易紀錄在查詢使用者歷史、類型分類統計、依時間排序時皆具備更佳查詢效率，並能在資料量累積下保持後台分析、錢包查詢與系統審計的即時性與穩定度。
+
+\subsubsection{Review 表索引}
+評價系統是平台信任機制的重要組成，review 資料表負責儲存訂單完成後的評分與評論內容，用於反映交易品質、使用者行為、以及是否具備良好風評。由於評價資料經常用於排序、查詢、身份追溯、後台稽核等功能，因此若缺乏索引，當評論量逐漸成長後查詢將明顯變慢。因此，我們針對高頻查詢欄位建立索引以提升系統效能。
+
+其中，order\_id 可快速定位某筆交易是否已有評價，以及查看買賣雙方對單一訂單的回饋；reviewer\_id 則用於查看某位使用者發表的所有評價，有助於分析買家或賣家在平台上的使用紀錄；target\_id 則代表評論的對象，即買方／賣方／貼文持有者，用於評估其整體評價紀錄與可信度；rating 則在排序、篩選高低分數評論時提供性能優勢，使平台得以快速呈現優質交易或找出風險帳號。
+
+SQL 建置語法如下：
+\begin{lstlisting}[language=SQL]
+CREATE INDEX IF NOT EXISTS idx_review_order_id ON review(order_id);
+CREATE INDEX IF NOT EXISTS idx_review_reviewer_id ON review(reviewer_id);
+CREATE INDEX IF NOT EXISTS idx_review_target_id ON review(target_id);
+CREATE INDEX IF NOT EXISTS idx_review_rating ON review(rating);
+\end{lstlisting}
+透過以上索引設計，系統能快速取得訂單的評價記錄、查詢使用者過往評價行為、查看某一帳號的信用評分並依照分數排序評論，不論是買家瀏覽評價或後台稽查帳號，都能擁有更佳查詢體驗與處理效率，並使平台信任機制得以有效運作。
+
+\subsubsection{Message 表索引}
+私訊系統是平台中使用者互動的主要方式之一，message 資料表負責存放雙方溝通內容，包括訊息傳送者、接收者、傳送時間與已讀狀態等欄位。由於訊息查詢行為可能頻繁且即時性需求高，例如顯示聊天室歷史訊息、讀取未讀訊息提醒或依時間排序對話內容，因此建立索引能有效提升整體訊息讀取與傳遞效率。
+
+其中，sender\_id 與 receiver\_id 用於快速查詢特定使用者之間的訊息往來，當聊天室或對話視窗開啟時，系統可透過索引直接定位相關訊息而避免全表掃描。在通知系統中，is\_read 作為未讀訊息篩選條件，索引可使平台快速判斷某位使用者是否有未查看訊息。sent\_time 則常用於排序訊息流，如呈現最新對話、顯示時間紀錄、撈取歷史訊息等情境，索引能確保即使訊息量增加仍具備即時讀取能力。
+
+建立索引的 SQL 語法如下：
+\begin{lstlisting}[language=SQL]
+CREATE INDEX IF NOT EXISTS idx_message_sender_id ON message(sender_id);
+CREATE INDEX IF NOT EXISTS idx_message_receiver_id ON message(receiver_id);
+CREATE INDEX IF NOT EXISTS idx_message_is_read ON message(is_read);
+CREATE INDEX IF NOT EXISTS idx_message_sent_time ON message(sent_time);
+\end{lstlisting}
+透過此索引配置，平台能更迅速完成私訊紀錄讀取、未讀訊息提醒、依時間排序訊息流等任務，並確保聊天系統在大量訊息累積時依然能保持順暢，不會因資料量成長而使訊息開啟延遲或查詢速度下降。
+
+\subsubsection{Favorite Posts 表索引}
+收藏機制讓使用者能快速儲存、追蹤與再次瀏覽感興趣的貼文，而 favorite\_posts 資料表即為此功能的核心儲存來源。平台在顯示會員的收藏清單、檢查某篇貼文是否已加入最愛、或分析熱門收藏貼文時，都會頻繁存取此表。因此我們針對常見查詢條件建立索引，以提升系統存取性能。
+
+其中，u\_id 用於查詢某位使用者的收藏紀錄。在前端點擊「查看我的收藏」或刷新收藏頁面時，索引能避免逐筆搜索，顯著減少查詢時間。p\_id 則可協助後台追蹤某篇貼文的收藏熱度，常用於統計、熱門排序或推薦系統。另一欄位 added\_time 則能使系統依收藏時間排序，如顯示最新收藏、歷史追蹤或時間分群分析，索引可避免大量排序運算，進一步降低反應延遲。
+
+建立索引的 SQL 如下：
+\begin{lstlisting}[language=SQL]
+CREATE INDEX IF NOT EXISTS idx_favorite_u_id ON favorite_posts(u_id);
+CREATE INDEX IF NOT EXISTS idx_favorite_p_id ON favorite_posts(p_id);
+CREATE INDEX IF NOT EXISTS idx_favorite_added_time ON favorite_posts(added_time);
+\end{lstlisting}
+透過上述索引設計，系統在顯示收藏列表、查詢貼文是否已加入收藏、以及依時間排序收藏紀錄時皆能更快速、低延遲地回應。此外，索引能在資料量累積後維持效能，使收藏功能具備良好擴展性並保持使用體驗流暢。
+
+
+\subsubsection{Posting Images 表索引}
+貼文圖片為使用者認知商品資訊的重要來源，posting\_images 資料表負責儲存貼文對應圖片的檔案位置與顯示順序。由於前端在呈現貼文內容時，會頻繁依照貼文編號載入多張圖片，並依照排序進行顯示，因此建立索引可有效提升貼文圖片讀取速度並降低查詢延遲。
+
+其中，p\_id 是最核心的查詢欄位，用於顯示某篇貼文所有圖片。例如使用者點開貼文或切換頁面時，系統會大量依據此欄位查詢，因此建立索引能避免大量 Full Table Scan。另一欄位 display\_order 則負責控制顯示排列順序，如縮圖排序、主圖優先顯示等，索引能加速依序排列查找圖片順序的流程，確保商品圖片載入過程更流暢。
+
+SQL 建立索引語法如下：
+\begin{lstlisting}[language=SQL]
+CREATE INDEX IF NOT EXISTS idx_posting_images_p_id ON posting_images(p_id);
+CREATE INDEX IF NOT EXISTS idx_posting_images_display_order ON posting_images(display_order);
+\end{lstlisting}
+透過以上索引設定，系統能更快速載入貼文圖片、依照順序呈現圖檔內容，並在貼文圖片量增加後仍維持查詢與排序效率，提升整體瀏覽體驗與資料表的可擴展性。
+
+\subsubsection{Course 表索引}
+課程資料是整個平台分類貼文、搜尋條件與使用者瀏覽邏輯中的關鍵基礎，course 資料表負責儲存科系代碼、分類層級、課程代碼等資訊，並與 posting、favorite\_posts、order 等功能相互關聯。因此，我們針對常用的查詢欄位建立索引，使課程搜尋與過濾過程能在大量資料狀況下依然維持快速回應。
+
+其中，dept\_id 可用於篩選特定系所課程，在搜尋某系課程或分類貼文時能明顯降低查詢延遲。class\_id 則對應課程分類層級，使平台能依班別（Class Category）快速定位課程，常用於分類頁與課程列表展開時。course\_code 為課程的唯一識別欄位，使用者在精確查詢或比對課程資料時，索引能避免進行全表掃描，並加速後台比對、資訊串接與貼文標註流程。
+
+SQL 建立索引語法如下：
+\begin{lstlisting}[language=SQL]
+CREATE INDEX IF NOT EXISTS idx_course_dept_id ON course(dept_id);
+CREATE INDEX IF NOT EXISTS idx_course_class_id ON course(class_id);
+CREATE INDEX IF NOT EXISTS idx_course_code ON course(course_code);
+\end{lstlisting}
+透過以上索引機制，課程分類、代碼查詢與系所篩選流程皆能顯著降低讀取成本，並確保課程資料在被頻繁引用至貼文、收藏、訂單與搜尋模組時仍可快速存取，使整體系統的課程導向查詢更加流暢、可擴展且具備長期效能優勢。
+
+
+
+\subsubsection{索引效果}
+
 \subsection{交易管理}
 \subsection{並行控制}
 
