@@ -352,6 +352,12 @@ CREATE INDEX IF NOT EXISTS idx_course_code ON course(course_code);
 \subsubsection{索引效果}
 
 \subsection{交易管理}
+在本系統中，購買流程被視為一個必須同時滿足原子性（Atomicity）、一致性（Consistency）、隔離性（Isolation）與持久性（Durability）的複合操作。因此，我們選擇將交易邏輯下放到資料庫端，以 PostgreSQL 的 PL/pgSQL 函數實作完整的交易流程，而非單純在應用程式層中依序執行多個獨立的 SQL 指令。在 \texttt{supabase/migrations/005\_add\_functions.sql} 中，我們定義了一個 \texttt{purchase\_book(p\_buyer\_id INT, p\_posting\_id INT)} 函數，負責處理從檢查商品狀態、驗證餘額、扣款與入帳，到更新刊登狀態與建立訂單的全部步驟。當使用者在前端按下購買按鈕時，系統會呼叫此函數，由資料庫在單一交易（transaction）中完成所有相關更新。
+
+在交易過程中，\texttt{purchase\_book} 首先透過 \texttt{SELECT ... FOR UPDATE} 讀取並鎖定對應的 \texttt{posting} 紀錄與買家的 \texttt{"user"} 紀錄，確保同一時間只有一個交易流程可以修改同一筆商品與餘額資料，達成併行控制（Isolation）。接著，函數依序檢查：刊登是否存在、商品狀態是否為可購買的 \texttt{'listed'}、買家是否存在、餘額是否足夠，以及買家與賣家是否為同一人；只要其中任一條件不成立，函數便會立即回傳一個包含 \texttt{success = false} 與錯誤訊息的 JSON，不會對資料庫做任何修改。若所有檢查均通過，函數才會扣除買家餘額、增加賣家餘額、將對應的 \texttt{posting} 狀態更新為 \texttt{'sold'}，並在 \texttt{orders} 表中建立一筆狀態為 \texttt{'completed'} 的訂單，最後回傳包含訂單編號與成交金額的成功結果。
+
+為了讓金流紀錄與商品狀態自動同步，我們在 \texttt{supabase/migrations/004\_add\_triggers.sql} 中額外設計了多個與訂單相關的觸發器。例如，\texttt{update\_posting\_status\_on\_order} 會在 \texttt{orders} 表新增或更新且狀態為 \texttt{'completed'} 時，自動將對應的 \texttt{posting} 設為已售出，確保商品狀態與訂單結果保持一致；\texttt{record\_transaction\_on\_order} 則會在訂單完成時，同步於 \texttt{transaction\_record} 表中新增兩筆紀錄：一筆為買家的付款（負數金額，\texttt{trans\_type = 'payment'}），一筆為賣家的收入（正數金額，\texttt{trans\_type = 'income'}），形成類似雙向記帳的金流追蹤機制。上述函數與觸發器皆在資料庫交易中執行，若過程中發生任何未預期錯誤，PL/pgSQL 會進入 \texttt{EXCEPTION} 區塊並回傳失敗訊息，整個交易自動回滾（rollback），保證不會出現「扣了錢但沒有訂單」或「商品被標記為已售出但金流未入帳」等不一致情況。透過這樣的設計，我們將購買流程的關鍵不變性約束收斂在資料庫交易中，達成具備 ACID 特性的交易管理。
+
 \subsection{並行控制}
 
 \section{分工資訊}
