@@ -1,0 +1,166 @@
+% !TEX program = xelatex
+\documentclass[a4paper]{article}
+
+% --- 中文設定，使用 xeCJK 套件 ---
+\usepackage{xeCJK}
+\setCJKmainfont{PingFang TC} % 設定中文字型，蘋方是macOS內建的好選擇
+\usepackage{graphicx}
+\usepackage{float}
+
+% --- 表格與版面設定（這段就是要加的） ---
+\usepackage{booktabs}
+\usepackage{array}
+% 引入 hyperref 套件
+\usepackage{hyperref}
+
+% 設定連結樣式 (建議加上這段，不然預設會有醜醜的紅框)
+\hypersetup{
+    colorlinks=true,    % 使用顏色來標示連結 (設為 false 則會有方框)
+    linkcolor=black,    % 內部連結 (如目錄、章節) 的顏色，設為黑色比較正式
+    urlcolor=blue,      % 網址連結的顏色，通常設為藍色讓讀者知道可點擊
+    citecolor=black     % 參考文獻引用的顏色
+}
+
+\renewcommand{\arraystretch}{1.2}
+\setlength{\tabcolsep}{6pt}
+
+
+
+% --- 基本文件資訊 ---
+\title{114-1 資料庫管理\ 期末專案完整報告}
+\author{資管三 B11705061 羅立宸 \and
+        資管三 B12705011 黃元翔 \and
+        資管三 B12705057 陳以倫}
+\date{Dec. 2025} % \today 會自動抓今天的日期
+
+
+
+\begin{document}
+
+\maketitle % 產生標題
+
+\begin{center}
+    \href{https://github.com/Lorry0811/db_final}{GitHub 專案連結}  % 雙反斜線 \\ 代表換行
+    \href{https://www.youtube.com/}{YouTube 影片連結}
+\end{center}
+
+\section{系統分析} % 這是第一節的標題
+學期初買的教科書超貴，學期末卻堆在角落長灰塵？想買學長姐的二手書，卻不知道去哪裡找？如果你有這些困擾，趕緊上「BookSwap」尋找你需要的二手好物！
+
+「BookSwap」是一個提供給某大學學生刊登及尋找二手教科書與物品的平台 ，主要目的是幫助該校學生解決二手物品（特別是教科書）資訊不流通、交易媒合困難的窘境 。平台上的「刊登」是指一次性的物品出售貼文，每篇貼文都是獨立的，有自己的刊登編號 。交易完成或下架後，該刊登即失效。使用者可以主動舉報可疑貼文或留言，建立社群自我管理的基礎。每次違規都會被記錄，達一定次數（例如 3 次）後，系統會自動停權或封鎖帳號，防止惡意刊登或詐騙帳號重複出現。
+
+根據不同的功能及掌控權限，「BookSwap」系統的用戶可以分為兩種身分，分別是 User 及 Admin 。
+User（一般使用者）：可依照自身需求，選擇「刊登」想賣的物品，或是「瀏覽/搜尋」平台上由其他人刊登的物品 。若想刊登物品，可透過介面輸入物品的標題、描述、價格、分類，並上傳照片 。如果物品是教科書，還可以關聯到特定「課程」 。如果使用者想購買物品，則可瀏覽平台上現有的刊登，並選擇感興趣的物品進行聯繫。
+Admin（管理者）：則是「BookSwap」系統的業務經營者，主要負責管理「課程」及「物品分類」的資訊 ，並且可查詢所有使用者的刊登紀錄，收到User舉報後會審核、決定是否移除或警告不適當的刊登內容 。
+\subsection{系統功能}
+\subsubsection{關於刊登的相關設定}
+系統會提供「物品分類」讓使用者選擇，例如：教科書、3C 產品、生活用品等。如果使用者選擇的分類是「教科書」，系統會建議使用者從一個課程列表中選擇想關聯的「課程」 ，例如「資料庫管理」，以利他人搜尋。每則刊登都會有「狀態」，例如：刊登中、預訂中、已售出 。
+
+\subsubsection{給 User 的功能}
+在本系統中，User 可以執行以下功能：
+\begin{itemize}
+    \item 新增刊登：使用者能透過設定物品標題、描述、價格、分類等相關資訊來刊登一項物品 。如果物品是教科書，還可以選擇想關聯的課程 。一旦刊登，系統便會給定一個屬於該刊登的編號 。
+    \item 新增留言：使用者能透過在刊登的底下留言，例如"想要"、"有興趣"來表達自己的意願，也能使刊登者知道自己刊登的物品是否有人有意願。
+    \item 收藏物品：使用者若看到感興趣的刊登，可將其「加入收藏」，作為一筆新的收藏資料新增至資料庫 。
+    \item 管理刊登：使用者如果不想繼續販售，可刪除（或下架）自己刊登的物品 。
+    \item 查詢使用者曾經刊登過的物品：使用者可以查詢自身曾建立過的刊登和刊登的所有留言，包括「刊登中」與「已售出」的 。
+    \item 查詢使用者收藏的物品：使用者可以查詢自身收藏過的刊登 。
+    \item 查詢目前平台上的刊登：使用者可依分類、課程、關鍵字或價格，查詢尚未售出且刊登中的物品 。
+    \item 舉報不當刊登：若使用者發現疑似詐騙、違禁品或不當內容的貼文，可透過「舉報」功能提交檢舉。
+\end{itemize}
+
+\subsubsection{給 Admin 的功能}
+在本系統中，Admin 可以執行以下功能：
+\begin{itemize}
+    \item 管理課程：業務經營者可對課程資訊進行增刪改查的操作 ，以確保課程列表是最新狀態。
+    \item 管理分類：業務經營者可對物品分類進行增刪改查的操作 。
+    \item 查詢使用者資訊：業務經營者可查詢所有使用者的活動紀錄，包括該使用者曾經刊登過哪些物品 。
+    \item 查詢刊登資訊：業務經營者可查詢所有刊登的詳細資訊，並移除違規（如詐騙或違禁品）的刊登 。
+    \item 審核舉報與處理違規：業務經營者會審核舉報內容，若經查屬實，將移除該刊登並記錄違規行為。當使用者違規達一定次數後，系統會自動封鎖該使用者帳號，以維護平台秩序與安全。
+\end{itemize}
+
+\section{系統設計}
+\subsection{ER Diagram}
+Figure 1 是 BookSwap 的 ER Diagram，這個ERD中有三個實體：User, Posting, Comment以及三個關係：Post, Make\_Comments, Have。
+
+其中 User 代表的是使用「BookSwap」的使用者，我們讓使用者用email註冊，並請使用者設定一組username和password，在註冊後我們會給使用者一個獨一無二的ID，並且可以在使用者創建帳戶後，從後台將其變更為管理者，此時該使用者的Admin就會是1，否則為0。
+
+每位使用者都可以將一些他喜歡的post放入自己的favorites清單。另外如果使用者的刊登被下架超過三次，這位使用者也會被封鎖。
+
+Posting 代表的是使用者刊登的物品，每個物品都有一個獨一無二的ID，會有標題、說明文字、價格、狀態（刊登中、已售出、已被檢舉、已下架）、關聯的課程（如果物品是教科書）、課程所屬的類別（Class）比如說法律類、資訊類、文學類。
+
+Comment代表是每個Posting實體下的留言，每則留言都會有獨特的ID、內容、由哪位使用者發出。
+
+Post關係是指一位使用者可以刊登多筆刊登。Make\_Comments關係是指一位使用者可以留多筆言。Have關係是指一筆刊登可以擁有多筆留言。
+
+ERD中可能有部分不符合normalization的設計，這些會在2.2節解決。
+
+
+
+\subsection{Relational Database Schema Diagram}
+Relational Database Schema Diagram 中總共有7個table，分別是 \texttt{user} (使用者)、\texttt{posting} (貼文)、\texttt{comment} (留言)、\texttt{class} (貼文類別)、\texttt{course} (課程)、\texttt{favorite\_posts} (收藏貼文) 和 \texttt{report} (舉報)。如下圖 Figure 2 所示。
+
+
+\subsection{Data Dictionary}
+資料表共有Relational Database Schema Diagram 所示的七個，各個資料表的欄位相關資訊依序呈現在表 1到表 7。
+
+
+\subsection{正規化分析}
+在 1NF 方面，如果每個關聯的屬性都是 simple 且 single-valued，換句話說，在關
+聯中沒有任何一個屬性是 composite 或 multi-valued，則滿足 1NF。
+
+在 2NF 方面，如果關聯中的所有非鍵屬性（non-prime attribute）都完全功能相
+依（fully functional dependency）於任一候選鍵（candidate key），也就是沒有出現部
+分功能相依性（partial functional dependency），且此關聯滿足 1NF，則滿足 2NF。
+
+在 3NF 方面，如果一個關聯中的非鍵屬性都沒有遞移相依（transitively dependency）於主鍵，則滿足 3NF。因此同樣檢視一下設計的關聯，的確有符合 3NF。在
+比 3NF 更嚴謹的 BCNF 方面，要求關聯中的每一個功能相依的箭頭左方都要是超級
+鍵（superkey），也就是要確保 X → Y 的 X 一定是超級鍵。我們的 schema 也符合
+BCNF。
+
+最後是 4NF，由於「BookSwap」的所有關聯都不存在多值相依（multi-valued dependency），因此滿足 4NF 的條件。
+
+
+\section{系統實作}
+\subsection{資料庫建置方式及資料來源說明}
+本系統為確保功能測試之完整性與展示效果，採用自動化腳本批量生成模擬資料（Mock Data）。資料建置並非採用手動輸入，而是透過編寫 PostgreSQL 的 PL/pgSQL 程序化語言腳本（generate/\_fake/\_data.sql），依據預設邏輯自動填充資料庫。具體的資料建置策略與來源說明如下：
+
+\textbf{1. 資料生成策略 (Data Generation Strategy)}
+
+自動化生成：利用 SQL 迴圈（Loop）與隨機函數，動態產生使用者資訊、商品詳情與交易紀錄，模擬系統長期運作下的數據累積。
+
+真實性模擬：
+基礎資料：預先匯入真實存在的 20 個科系（如資管、資工、法律等）與 20 門常見課程（如資料庫管理、經濟學原理），確保學術背景的真實感。
+內容差異化：針對不同分類（如教科書、3C產品）設定差異化的價格區間與標題格式，並串接外部圖片服務（Placeholder API）模擬商品圖片。
+
+\textbf{2. 邏輯完整性與關聯控制 (Logic \& Integrity Constraints)}
+
+為確保資料符合資料庫正規化原則與業務邏輯，生成過程嚴格遵守以下限制：
+
+參照完整性 (Referential Integrity)：嚴格依照「基礎資料 $\rightarrow$ 使用者 $\rightarrow$ 商品刊登 $\rightarrow$ 互動/交易」的順序生成，確保所有外鍵關聯（Foreign Key）正確無誤。
+
+業務邏輯檢查：
+買賣邏輯：系統強制限制買家與賣家不得為同一使用者。
+狀態連動：僅有狀態為「已售出 (Sold)」的商品才會生成對應訂單；僅有「已完成 (Completed)」的訂單才會產生評價。
+價格一致性：訂單成交價格嚴格對應商品刊登時的原始價格。
+
+\textbf{3. 資料規模 (Data Scale)}
+
+目前測試環境共生成約 60,000 筆 資料，涵蓋系統核心的 13 張資料表，規模足以進行壓力測試與查詢效能分析：
+使用者：1,000 位（包含雜湊處理過的密碼與隨機餘額）。
+商品刊登：12,000 筆（涵蓋上架、保留、售出等不同狀態）。
+交易與互動：包含 3,000 筆訂單、5,000 筆交易紀錄及數千筆留言與收藏紀錄。
+
+
+
+
+
+\subsection{重要功能及對應的 SQL 指令}
+\subsection{SQL 指令效能優化與索引建立分析}
+\subsection{交易管理}
+\subsection{並行控制}
+
+\section{分工資訊}
+
+\section{專案心得}
+\end{document}

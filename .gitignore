@@ -46,8 +46,19 @@ apps/web/next-env.d.ts
 coverage/
 .nyc_output/
 
+# LaTex 相關
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+*.xdv
+
 # 其他
 *.pem
 dist/
 build/
+
+
 
