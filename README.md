@@ -25,6 +25,10 @@ BookSwap 是一個提供給大學學生刊登及尋找二手教科書與物品�
   - 審核舉報
   - 查看統計報表
 
+## 執行時截圖
+![替代文字](images/s1.png "主畫面")
+![替代文字](images/s2.png "終端機執行畫面")
+
 ## 技術棧
 
 - **前端：** Next.js 14 (App Router) + TypeScript + React + Tailwind CSS
