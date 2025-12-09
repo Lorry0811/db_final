@@ -121,7 +121,7 @@ Relational Database Schema Diagram 中總共有7個table，分別是 \texttt{use
 
 
 \subsection{Data Dictionary}
-資料表共有Relational Database Schema Diagram 所示的七個，各個資料表的欄位相關資訊依序呈現在表 1到表 7。
+資料表共有Relational Database Schema Diagram 所示的七個，各個資料表的欄位相關資訊依序呈現在表 1到表 11。
 
 \begin{table}[H]
     \centering
@@ -143,10 +143,197 @@ Relational Database Schema Diagram 中總共有7個table，分別是 \texttt{use
     \hline
     \end{tabular}
     \caption{資料表 USER 的欄位資訊}
-    \end{table}
-     
+\end{table}
 
+\begin{table}[H]
+    \centering
+    \renewcommand{\arraystretch}{1.1}     % 行距
+    \setlength{\tabcolsep}{3pt}           % 欄距
+    \footnotesize                         % 字體稍微縮小
+    \begin{tabular}{p{2.1cm} p{1.5cm} p{3.5cm} p{0.9cm} p{3.1cm} p{3.6cm}}
+    \hline
+    Column Name & Meaning & Data Type & Key & Constraint & Domain \\
+    \hline
+    p\_id       & 刊登編號           & INT UNSIGNED        & PK  & Not Null, Auto\_Increment                     & 每筆刊登的流水號 \\
+    description & 描述               & TEXT                &     & Not Null                                      & 刊登內容說明文字 \\
+    price       & 價格               & DECIMAL(10,2)       &     & Not Null, CHECK (price $\ge$ 0)              & 新台幣金額 \\
+    status      & 刊登狀態           & ENUM('listed', 'reserved', 'sold', 'removed', 'reported') & & Not Null, Default 'listed' & listed：刊登中；reserved：預訂中；sold：已售出；removed：下架；reported：被舉報 \\
+    u\_id       & 刊登者使用者編號   & INT UNSIGNED        & FK  & Not Null, REFERENCES user(u\_id) \\ 
+                &                    &                     &     & ON DELETE CASCADE ON UPDATE CASCADE          & 對應發文者之 user.u\_id \\
+    course\_id  & 關聯課程編號       & INT UNSIGNED        & FK  & Nullable, REFERENCES course(course\_id) \\ 
+                &                    &                     &     & ON DELETE SET NULL ON UPDATE CASCADE         & 若為教科書則指向對應課程，非教科書可為 NULL \\
+    \hline
+    \end{tabular}
+    \caption{資料表 POSTING 的欄位資訊}
+\end{table}
+    
+\begin{table}[H]
+    \centering
+    \renewcommand{\arraystretch}{1.1}
+    \setlength{\tabcolsep}{3pt}
+    \footnotesize
+    \begin{tabular}{p{2.1cm} p{2.6cm} p{2.4cm} p{0.9cm} p{3.1cm} p{3.6cm}}
+    \hline
+    Column Name & Meaning & Data Type & Key & Constraint & Domain \\
+    \hline
+    c\_id    & 留言編號           & INT UNSIGNED & PK & Not Null, Auto\_Increment & 每則留言的流水號 \\
+    content  & 留言內容           & TEXT         &    & Not Null                   & 留言文字內容 \\
+    u\_id    & 留言者使用者編號   & INT UNSIGNED & FK & Not Null, FK $\rightarrow$ "user"(u\_id), ON DELETE CASCADE ON UPDATE CASCADE & 對應留言者之 user.u\_id \\
+    p\_id    & 所屬刊登編號       & INT UNSIGNED & FK & Not Null, FK $\rightarrow$ posting(p\_id), ON DELETE CASCADE ON UPDATE CASCADE & 對應貼文之 posting.p\_id \\
+    \hline
+    \end{tabular}
+    \caption{資料表 COMMENT 的欄位資訊}
+\end{table}
+    
+\begin{table}[H]
+    \centering
+    \renewcommand{\arraystretch}{1.1}
+    \setlength{\tabcolsep}{3pt}
+    \footnotesize
+    \begin{tabular}{p{2.1cm} p{2.6cm} p{2.4cm} p{0.9cm} p{2.4cm} p{3.6cm}}
+    \hline
+    Column Name & Meaning & Data Type & Key & Constraint & Domain \\
+    \hline
+    class\_id   & 類別編號         & INT UNSIGNED   & PK & Not Null, Auto\_Increment & 貼文類別流水號 \\
+    class\_name & 類別名稱         & VARCHAR(100)   &    & Not Null, Unique & 如「資訊類」、「法律類」、「文學類」等 \\
+    \hline
+    \end{tabular}
+    \caption{資料表 CLASS 的欄位資訊}
+\end{table}
 
+\begin{table}[H]
+    \centering
+    \renewcommand{\arraystretch}{1.1}
+    \setlength{\tabcolsep}{3pt}
+    \footnotesize
+    \begin{tabular}{p{2.1cm} p{2.6cm} p{2.4cm} p{0.9cm} p{3.1cm} p{3.6cm}}
+    \hline
+    Column Name & Meaning & Data Type & Key & Constraint & Domain \\
+    \hline
+    course\_id   & 課程編號         & INT UNSIGNED & PK & Not Null, Auto\_Increment & 每門課程的流水號 \\
+    course\_name & 課程名稱         & VARCHAR(120) &    & Not Null                  & 如「資料庫管理」、「線性代數」等課程名稱 \\
+    class\_id    & 所屬類別編號     & INT UNSIGNED & FK & Not Null, FK $\rightarrow$ class(class\_id), ON DELETE RESTRICT ON UPDATE CASCADE & 對應之貼文類別編號 class.class\_id \\
+    \hline
+    \end{tabular}
+    \caption{資料表 COURSE 的欄位資訊}
+\end{table}
+
+\begin{table}[H]
+    \centering
+    \renewcommand{\arraystretch}{1.1}
+    \setlength{\tabcolsep}{3pt}
+    \footnotesize
+    \begin{tabular}{p{2.1cm} p{2.6cm} p{2.4cm} p{0.9cm} p{3.1cm} p{3.6cm}}
+    \hline
+    Column Name & Meaning & Data Type & Key & Constraint & Domain \\
+    \hline
+    u\_id      & 使用者編號         & INT        & PK, FK & Not Null, FK $\rightarrow$ "user"(u\_id), ON DELETE CASCADE ON UPDATE CASCADE & 收藏者之 user.u\_id \\
+    p\_id      & 刊登編號           & INT        & PK, FK & Not Null, FK $\rightarrow$ posting(p\_id), ON DELETE CASCADE ON UPDATE CASCADE & 被收藏貼文之 posting.p\_id \\
+    added\_time& 加入收藏時間       & TIMESTAMP  &        & Default CURRENT\_TIMESTAMP & 系統記錄加入最愛的時間點 \\
+    \hline
+    \end{tabular}
+    \caption{資料表 FAVORITE\_POSTS 的欄位資訊}
+\end{table}
+
+\begin{table}[H]
+    \centering
+    \renewcommand{\arraystretch}{1.1}
+    \setlength{\tabcolsep}{3pt}
+    \footnotesize
+    \begin{tabular}{p{2.1cm} p{2.6cm} p{2.4cm} p{0.9cm} p{3.1cm} p{3.6cm}}
+    \hline
+    Column Name & Meaning & Data Type & Key & Constraint & Domain \\
+    \hline
+    u\_id       & 檢舉者使用者編號 & INT UNSIGNED & PK, FK & Not Null, FK $\rightarrow$ "user"(u\_id), ON DELETE CASCADE ON UPDATE CASCADE & 發出檢舉的使用者編號 \\
+    p\_id       & 被檢舉刊登編號   & INT UNSIGNED & PK, FK & Not Null, FK $\rightarrow$ posting(p\_id), ON DELETE CASCADE ON UPDATE CASCADE & 被檢舉貼文之編號 \\
+    content     & 檢舉內容         & TEXT         &        & Not Null                                      & 檢舉原因、說明文字 \\
+    report\_time& 檢舉時間         & TIMESTAMP    & PK     & Not Null, Default CURRENT\_TIMESTAMP          & 系統記錄檢舉送出時間 \\
+    \hline
+    \end{tabular}
+    \caption{資料表 REPORT 的欄位資訊}
+\end{table}
+    
+\begin{table}[H]
+    \centering
+    \renewcommand{\arraystretch}{1.1}
+    \setlength{\tabcolsep}{3pt}
+    \footnotesize
+    \begin{tabular}{p{2.1cm} p{2.6cm} p{2.4cm} p{0.9cm} p{3.1cm} p{3.6cm}}
+    \hline
+    Column Name & Meaning & Data Type & Key & Constraint & Domain \\
+    \hline
+    order\_id   & 訂單編號         & SERIAL       & PK  & Not Null, Auto\_Increment                     & 每筆訂單的唯一流水號 \\
+    buyer\_id   & 買家使用者編號   & INT          & FK  & Not Null, FK $\rightarrow$ "user"(u\_id)      & 下單者之 user.u\_id \\
+    p\_id       & 刊登編號         & INT          & FK  & Not Null, FK $\rightarrow$ posting(p\_id)     & 對應的商品刊登編號 \\
+    deal\_price & 成交價格         & INT          &     & Not Null                                      & 成交當下之新台幣金額 \\
+    order\_date & 下單時間         & TIMESTAMP    &     & Default CURRENT\_TIMESTAMP                    & 系統自動記錄建立時間 \\
+    status      & 訂單狀態         & VARCHAR(20)  &     & Default 'completed'                           & \{'completed','cancelled'\} 等狀態值 \\
+    \hline
+    \end{tabular}
+    \caption{資料表 ORDERS 的欄位資訊}
+\end{table}
+    
+\begin{table}[H]
+    \centering
+    \renewcommand{\arraystretch}{1.1}
+    \setlength{\tabcolsep}{3pt}
+    \footnotesize
+    \begin{tabular}{p{2.1cm} p{2.6cm} p{2.4cm} p{0.9cm} p{3.1cm} p{3.6cm}}
+    \hline
+    Column Name & Meaning & Data Type & Key & Constraint & Domain \\
+    \hline
+    record\_id  & 交易紀錄編號     & SERIAL       & PK  & Not Null, Auto\_Increment                     & 每筆金流紀錄的唯一流水號 \\
+    u\_id       & 帳戶使用者編號   & INT          & FK  & Not Null, FK $\rightarrow$ "user"(u\_id)      & 這筆交易所屬之 user.u\_id \\
+    amount      & 金額             & INT          &     & Not Null                                      & 正數：收入/儲值；負數：支出 \\
+    trans\_type & 交易類型         & VARCHAR(20)  &     & & 例如 'top\_up','payment','income' 等 \\
+    trans\_time & 交易時間         & TIMESTAMP    &     & Default CURRENT\_TIMESTAMP                    & 系統自動記錄之時間戳記 \\
+    \hline
+    \end{tabular}
+    \caption{資料表 TRANSACTION\_RECORD 的欄位資訊}
+\end{table}
+    
+\begin{table}[H]
+    \centering
+    \renewcommand{\arraystretch}{1.1}
+    \setlength{\tabcolsep}{3pt}
+    \footnotesize
+    \begin{tabular}{p{2.1cm} p{2.6cm} p{2.4cm} p{0.9cm} p{3.1cm} p{3.6cm}}
+    \hline
+    Column Name & Meaning & Data Type & Key & Constraint & Domain \\
+    \hline
+    review\_id   & 評價編號           & SERIAL      & PK  & Not Null, Auto\_Increment              & 每筆評價的流水號 \\
+    order\_id    & 對應訂單編號       & INT         & FK  & Not Null, FK $\rightarrow$ orders(order\_id)   & 被評價之訂單 \\
+    reviewer\_id & 評價者使用者編號   & INT         & FK  & Not Null, FK $\rightarrow$ "user"(u\_id)       & 發出評價者 \\
+    target\_id   & 被評價者使用者編號 & INT         & FK  & Not Null, FK $\rightarrow$ "user"(u\_id)       & 評價的對象 \\
+    rating       & 評分               & INT         &     & Not Null, CHECK (rating BETWEEN 1 AND 5)       & 1\textasciitilde5 分整數 \\
+    comment      & 評價內容           & TEXT        &     &                                            & 文字評論，可為空 \\
+    created\_at  & 建立時間           & TIMESTAMP   &     & Default CURRENT\_TIMESTAMP                & 評價建立之時間 \\
+    \hline
+    \end{tabular}
+    \caption{資料表 REVIEW 的欄位資訊}
+\end{table}
+
+\begin{table}[H]
+    \centering
+    \renewcommand{\arraystretch}{1.1}
+    \setlength{\tabcolsep}{3pt}
+    \footnotesize
+    \begin{tabular}{p{2.1cm} p{2.6cm} p{2.4cm} p{0.9cm} p{3.1cm} p{3.6cm}}
+    \hline
+    Column Name & Meaning & Data Type & Key & Constraint & Domain \\
+    \hline
+    msg\_id      & 訊息編號           & SERIAL     & PK  & Not Null, Auto\_Increment           & 每則私訊的流水號 \\
+    sender\_id   & 寄件者使用者編號   & INT        & FK  & Not Null, FK $\rightarrow$ "user"(u\_id) & 發送訊息者 \\
+    receiver\_id & 收件者使用者編號   & INT        & FK  & Not Null, FK $\rightarrow$ "user"(u\_id) & 接收訊息者 \\
+    content      & 訊息內容           & TEXT       &     & Not Null                             & 私訊文字內容 \\
+    sent\_time   & 傳送時間           & TIMESTAMP  &     & Default CURRENT\_TIMESTAMP           & 訊息送出時間 \\
+    is\_read     & 是否已讀           & BOOLEAN    &     & Not Null, Default FALSE              & TRUE：已讀；FALSE：未讀 \\
+    \hline
+    \end{tabular}
+    \caption{資料表 MESSAGE 的欄位資訊}
+\end{table}
+    
+    
 \subsection{正規化分析}
 在 1NF 方面，如果每個關聯的屬性都是 simple 且 single-valued，換句話說，在關
 聯中沒有任何一個屬性是 composite 或 multi-valued，則滿足 1NF。
@@ -709,19 +896,5 @@ CREATE INDEX IF NOT EXISTS idx_course_code ON course(course_code);
 
 
 
-\begin{table}[H]
-    \centering
-    \renewcommand{\arraystretch}{1.3}
-    \begin{tabular}{l l l l l l}
-    \hline
-    Column Name & Meaning & Data Type & Key & Constraint & Domain \\
-    \hline
-    User\_id   & 使用者代號 & bigint       & PK & Not Null         & AUTO\_INCREMENT \\
-    User\_name & 使用者名稱 & varchar (50) &    & Not Null         &                  \\
-    Password   & 使用者密碼 & varchar (15) &    & Not Null         &                  \\
-    Email      & 使用者信箱 & varchar (50) &    & Not Null, Unique &                  \\
-    \hline
-    \end{tabular}
-    \caption{表 1：資料表 USER 的欄位資訊}
-    \end{table}
+
 \end{document}
