@@ -1,75 +1,8 @@
 -- 假資料生成腳本
+-- 需要 pgcrypto 來產生 bcrypt 雜湊
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 -- 注意：這個腳本會生成大量假資料，建議在測試環境中使用
-
--- 1. 插入科系資料（真實資料）
-INSERT INTO department (dept_name) VALUES
-('資訊管理學系'),
-('資訊工程學系'),
-('電機工程學系'),
-('機械工程學系'),
-('法律學系'),
-('經濟學系'),
-('企業管理學系'),
-('會計學系'),
-('財務金融學系'),
-('外國語文學系'),
-('中國文學系'),
-('歷史學系'),
-('哲學系'),
-('數學系'),
-('物理學系'),
-('化學系'),
-('生命科學系'),
-('心理學系'),
-('社會學系'),
-('政治學系')
-ON CONFLICT (dept_name) DO NOTHING;
-
--- 2. 插入分類資料
-INSERT INTO class (class_name, description) VALUES
-('教科書', '各類課程教科書'),
-('3C產品', '電腦、手機、平板等電子產品'),
-('生活用品', '日常生活用品'),
-('服飾', '衣服、鞋子、配件'),
-('運動用品', '運動器材、運動服飾'),
-('書籍', '非教科書類書籍'),
-('家具', '桌椅、櫃子等家具'),
-('其他', '其他類別')
-ON CONFLICT (class_name) DO NOTHING;
-
--- 3. 插入課程資料（真實課程）
-INSERT INTO course (course_code, course_name, dept_id, class_id)
-SELECT 
-    course_code,
-    course_name,
-    d.dept_id,
-    (SELECT class_id FROM class WHERE class_name = '教科書' LIMIT 1)
-FROM (VALUES
-    ('IM1001', '資料庫管理', 1),
-    ('IM1002', '系統分析與設計', 1),
-    ('IM1003', '程式設計', 1),
-    ('IM1004', '網路概論', 1),
-    ('IM1005', '資訊安全', 1),
-    ('CS1001', '資料結構', 2),
-    ('CS1002', '演算法', 2),
-    ('CS1003', '作業系統', 2),
-    ('CS1004', '計算機網路', 2),
-    ('EE1001', '電路學', 3),
-    ('EE1002', '電子學', 3),
-    ('ME1001', '工程數學', 4),
-    ('ME1002', '材料力學', 4),
-    ('LAW1001', '民法總則', 5),
-    ('LAW1002', '刑法總則', 5),
-    ('ECO1001', '經濟學原理', 6),
-    ('ECO1002', '個體經濟學', 6),
-    ('BA1001', '管理學', 7),
-    ('BA1002', '行銷管理', 7),
-    ('ACC1001', '會計學原理', 8)
-) AS courses(course_code, course_name, dept_id)
-JOIN department d ON courses.dept_id = d.dept_id
-ON CONFLICT (course_code, course_name) DO NOTHING;
-
--- 4. 生成使用者假資料（使用函數生成）
+-- 4. 生成使用者假資料（固定 100 個使用者）
 -- 先建立一個函數來生成隨機字串
 CREATE OR REPLACE FUNCTION random_string(length INT)
 RETURNS TEXT AS $$
@@ -85,14 +18,14 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- 插入使用者（生成 1000 個使用者）
+-- 插入使用者（生成 100 個使用者）
 DO $$
 DECLARE
     i INT;
     email_val TEXT;
     username_val TEXT;
 BEGIN
-    FOR i IN 1..1000 LOOP
+    FOR i IN 1..100 LOOP
         email_val := 'user' || i || '@example.com';
         username_val := 'user' || i;
         
@@ -100,7 +33,7 @@ BEGIN
         VALUES (
             email_val,
             username_val,
-            '$2a$10$' || random_string(53), -- 模擬 bcrypt hash
+            crypt(username_val || '_pass', gen_salt('bf')), -- 與使用者名相關並經 bcrypt
             floor(random() * 10000)::INT, -- 隨機餘額 0-10000
             CASE WHEN i = 1 THEN TRUE ELSE FALSE END, -- 第一個使用者是管理員
             FALSE
@@ -109,121 +42,113 @@ BEGIN
     END LOOP;
 END $$;
 
--- 5. 生成刊登假資料（生成 10000+ 筆）
+-- 5. 生成刊登假資料（100 個使用者 * 每人 100 筆 = 約 10,000 筆）
 DO $$
 DECLARE
-    i INT;
-    user_count INT;
-    class_count INT;
-    course_count INT;
-    random_user_id INT;
+    user_ids INT[];
+    user_idx INT;
+    post_idx INT;
     random_class_id INT;
     random_course_id INT;
     status_val TEXT;
     title_val TEXT;
     price_val INT;
 BEGIN
-    -- 取得數量
-    SELECT COUNT(*) INTO user_count FROM "user";
-    SELECT COUNT(*) INTO class_count FROM class;
-    SELECT COUNT(*) INTO course_count FROM course;
+    -- 取得所有使用者與分類列表
+    SELECT array_agg(u_id ORDER BY u_id) INTO user_ids FROM "user";
     
-    FOR i IN 1..12000 LOOP
-        -- 隨機選擇使用者
-        random_user_id := floor(random() * user_count + 1)::INT;
-        
-        -- 隨機選擇分類
-        random_class_id := floor(random() * class_count + 1)::INT;
-        
-        -- 如果是教科書分類，隨機選擇課程
-        IF random_class_id = 1 THEN
-            random_course_id := floor(random() * course_count + 1)::INT;
-        ELSE
-            random_course_id := NULL;
-        END IF;
-        
-        -- 隨機狀態（大部分是 listed）
-        status_val := CASE 
-            WHEN random() < 0.6 THEN 'listed'
-            WHEN random() < 0.8 THEN 'sold'
-            WHEN random() < 0.9 THEN 'reserved'
-            ELSE 'removed'
-        END;
-        
-        -- 生成標題
-        title_val := CASE random_class_id
-            WHEN 1 THEN '二手教科書 - ' || (SELECT course_name FROM course WHERE course_id = random_course_id LIMIT 1) || ' ' || i
-            WHEN 2 THEN '二手' || (ARRAY['iPhone', 'MacBook', 'iPad', '筆電', '手機'])[floor(random() * 5 + 1)::INT] || ' ' || i
-            ELSE '二手物品 ' || i
-        END;
-        
-        -- 隨機價格
-        price_val := CASE random_class_id
-            WHEN 1 THEN floor(random() * 800 + 100)::INT -- 教科書 100-900
-            WHEN 2 THEN floor(random() * 20000 + 1000)::INT -- 3C 產品 1000-21000
-            ELSE floor(random() * 1000 + 50)::INT -- 其他 50-1050
-        END;
-        
-        INSERT INTO posting (
-            u_id, title, description, price, status, class_id, course_id,
-            created_at
-        ) VALUES (
-            random_user_id,
-            title_val,
-            '這是商品描述 ' || i || '。商品狀況良好，歡迎詢問。',
-            price_val,
-            status_val,
-            random_class_id,
-            CASE WHEN random_class_id = 1 THEN random_course_id ELSE NULL END,
-            CURRENT_TIMESTAMP - (random() * INTERVAL '365 days')
-        );
-    END LOOP;
-END $$;
+    IF user_ids IS NULL OR array_length(user_ids, 1) IS NULL THEN
+        RAISE NOTICE 'No users found for posting generation.';
+        RETURN;
+    END IF;
 
--- 5.5. 生成刊登圖片假資料（為每個刊登生成 1-3 張圖片）
-DO $$
-DECLARE
-    i INT;
-    posting_count INT;
-    random_posting_id INT;
-    image_count INT;
-    j INT;
-BEGIN
-    SELECT COUNT(*) INTO posting_count FROM posting;
-    
-    FOR i IN 1..posting_count LOOP
-        random_posting_id := i;
-        
-        -- 每個刊登隨機生成 1-3 張圖片
-        image_count := floor(random() * 3 + 1)::INT;
-        
-        FOR j IN 1..image_count LOOP
-            INSERT INTO posting_images (p_id, image_url, display_order, created_at)
-            VALUES (
-                random_posting_id,
-                'https://picsum.photos/800/600?random=' || (random_posting_id * 10 + j), -- 使用 placeholder 圖片服務
-                j - 1, -- display_order 從 0 開始
+    FOR user_idx IN 1..array_length(user_ids, 1) LOOP
+        FOR post_idx IN 1..100 LOOP
+            -- 隨機分類
+            SELECT class_id INTO random_class_id
+            FROM class
+            ORDER BY random()
+            LIMIT 1;
+
+            -- 教科書分類才隨機課程
+            IF random_class_id = 1 THEN
+                SELECT course_id INTO random_course_id
+                FROM course
+                ORDER BY random()
+                LIMIT 1;
+            ELSE
+                random_course_id := NULL;
+            END IF;
+
+            -- 隨機狀態（主要 listed）
+            status_val := CASE 
+                WHEN random() < 0.6 THEN 'listed'
+                WHEN random() < 0.8 THEN 'sold'
+                WHEN random() < 0.9 THEN 'reserved'
+                ELSE 'removed'
+            END;
+
+            -- 生成標題
+            title_val := CASE random_class_id
+                WHEN 1 THEN '二手教科書 - ' || COALESCE((SELECT course_name FROM course WHERE course_id = random_course_id LIMIT 1), '未知課程') || ' #' || post_idx
+                WHEN 2 THEN '二手' || (ARRAY['iPhone', 'MacBook', 'iPad', '筆電', '手機'])[floor(random() * 5 + 1)::INT] || ' #' || post_idx
+                ELSE '二手物品 #' || post_idx
+            END;
+
+            -- 隨機價格
+            price_val := CASE random_class_id
+                WHEN 1 THEN floor(random() * 800 + 100)::INT -- 教科書 100-900
+                WHEN 2 THEN floor(random() * 20000 + 1000)::INT -- 3C 產品 1000-21000
+                ELSE floor(random() * 1000 + 50)::INT -- 其他 50-1050
+            END;
+
+            INSERT INTO posting (
+                u_id, title, description, price, status, class_id, course_id,
+                created_at
+            ) VALUES (
+                user_ids[user_idx],
+                title_val,
+                '這是商品描述 #' || post_idx || '。商品狀況良好，歡迎詢問。',
+                price_val,
+                status_val,
+                random_class_id,
+                CASE WHEN random_class_id = 1 THEN random_course_id ELSE NULL END,
                 CURRENT_TIMESTAMP - (random() * INTERVAL '365 days')
             );
         END LOOP;
     END LOOP;
 END $$;
 
--- 6. 生成留言假資料（生成 5000 筆）
+-- 5.5. 生成刊登圖片假資料（為每個刊登生成 1 張圖片即可，使用實際 p_id）
+DO $$
+DECLARE
+    rec RECORD;
+BEGIN
+    FOR rec IN SELECT p_id FROM posting LOOP
+        INSERT INTO posting_images (p_id, image_url, display_order, created_at)
+        VALUES (
+            rec.p_id,
+            'https://picsum.photos/800/600?random=' || (rec.p_id * 10 + 1),
+            0,
+            CURRENT_TIMESTAMP - (random() * INTERVAL '365 days')
+        );
+    END LOOP;
+END $$;
+
+-- 6. 生成留言假資料（生成 500 筆，隨機實際 user/posting）
 DO $$
 DECLARE
     i INT;
-    posting_count INT;
-    user_count INT;
     random_posting_id INT;
     random_user_id INT;
 BEGIN
-    SELECT COUNT(*) INTO posting_count FROM posting;
-    SELECT COUNT(*) INTO user_count FROM "user";
-    
-    FOR i IN 1..5000 LOOP
-        random_posting_id := floor(random() * posting_count + 1)::INT;
-        random_user_id := floor(random() * user_count + 1)::INT;
+    FOR i IN 1..500 LOOP
+        SELECT p_id INTO random_posting_id FROM posting ORDER BY random() LIMIT 1;
+        SELECT u_id INTO random_user_id FROM "user" ORDER BY random() LIMIT 1;
+
+        IF random_posting_id IS NULL OR random_user_id IS NULL THEN
+            CONTINUE;
+        END IF;
         
         INSERT INTO comment (p_id, u_id, content, created_at)
         VALUES (
@@ -235,21 +160,20 @@ BEGIN
     END LOOP;
 END $$;
 
--- 7. 生成收藏假資料（生成 8000 筆）
+-- 7. 生成收藏假資料（生成 800 筆，隨機實際 user / listed posting）
 DO $$
 DECLARE
     i INT;
-    posting_count INT;
-    user_count INT;
     random_posting_id INT;
     random_user_id INT;
 BEGIN
-    SELECT COUNT(*) INTO posting_count FROM posting WHERE status = 'listed';
-    SELECT COUNT(*) INTO user_count FROM "user";
-    
-    FOR i IN 1..8000 LOOP
-        random_posting_id := floor(random() * posting_count + 1)::INT;
-        random_user_id := floor(random() * user_count + 1)::INT;
+    FOR i IN 1..800 LOOP
+        SELECT p_id INTO random_posting_id FROM posting WHERE status = 'listed' ORDER BY random() LIMIT 1;
+        SELECT u_id INTO random_user_id FROM "user" ORDER BY random() LIMIT 1;
+
+        IF random_posting_id IS NULL OR random_user_id IS NULL THEN
+            CONTINUE;
+        END IF;
         
         INSERT INTO favorite_posts (u_id, p_id, added_time)
         VALUES (
@@ -261,7 +185,7 @@ BEGIN
     END LOOP;
 END $$;
 
--- 8. 生成訂單假資料（生成 3000 筆）
+-- 8. 生成訂單假資料（生成 300 筆，隨機已售出商品與買家）
 DO $$
 DECLARE
     i INT;
@@ -272,10 +196,7 @@ DECLARE
     seller_id INT;
     posting_price INT;
 BEGIN
-    SELECT COUNT(*) INTO posting_count FROM posting WHERE status = 'sold';
-    SELECT COUNT(*) INTO user_count FROM "user";
-    
-    FOR i IN 1..3000 LOOP
+    FOR i IN 1..300 LOOP
         -- 選擇已售出的商品
         SELECT p_id, u_id, price INTO random_posting_id, seller_id, posting_price
         FROM posting
@@ -304,19 +225,20 @@ BEGIN
     END LOOP;
 END $$;
 
--- 9. 生成交易紀錄假資料（生成 5000 筆）
+-- 9. 生成交易紀錄假資料（生成 500 筆，隨機實際 user）
 DO $$
 DECLARE
     i INT;
-    user_count INT;
     random_user_id INT;
     trans_type_val TEXT;
     amount_val INT;
 BEGIN
-    SELECT COUNT(*) INTO user_count FROM "user";
-    
-    FOR i IN 1..5000 LOOP
-        random_user_id := floor(random() * user_count + 1)::INT;
+    FOR i IN 1..500 LOOP
+        SELECT u_id INTO random_user_id FROM "user" ORDER BY random() LIMIT 1;
+
+        IF random_user_id IS NULL THEN
+            CONTINUE;
+        END IF;
         
         trans_type_val := (ARRAY['top_up', 'payment', 'income', 'refund'])[floor(random() * 4 + 1)::INT];
         
@@ -337,7 +259,7 @@ BEGIN
     END LOOP;
 END $$;
 
--- 10. 生成評價假資料（生成 2000 筆）
+-- 10. 生成評價假資料（生成 200 筆）
 DO $$
 DECLARE
     i INT;
@@ -348,7 +270,7 @@ DECLARE
 BEGIN
     SELECT COUNT(*) INTO order_count FROM orders WHERE status = 'completed';
     
-    FOR i IN 1..2000 LOOP
+    FOR i IN 1..200 LOOP
         SELECT 
             o.order_id,
             o.buyer_id,
@@ -381,24 +303,20 @@ BEGIN
     END LOOP;
 END $$;
 
--- 11. 生成私訊假資料（生成 3000 筆）
+-- 11. 生成私訊假資料（生成 300 筆，隨機實際 user，避免同人）
 DO $$
 DECLARE
     i INT;
-    user_count INT;
     random_sender_id INT;
     random_receiver_id INT;
 BEGIN
-    SELECT COUNT(*) INTO user_count FROM "user";
-    
-    FOR i IN 1..3000 LOOP
-        random_sender_id := floor(random() * user_count + 1)::INT;
-        
-        SELECT u_id INTO random_receiver_id
-        FROM "user"
-        WHERE u_id != random_sender_id
-        ORDER BY RANDOM()
-        LIMIT 1;
+    FOR i IN 1..300 LOOP
+        SELECT u_id INTO random_sender_id FROM "user" ORDER BY random() LIMIT 1;
+        SELECT u_id INTO random_receiver_id FROM "user" WHERE u_id != random_sender_id ORDER BY random() LIMIT 1;
+
+        IF random_sender_id IS NULL OR random_receiver_id IS NULL THEN
+            CONTINUE;
+        END IF;
         
         INSERT INTO message (sender_id, receiver_id, content, is_read, sent_time)
         VALUES (
@@ -411,21 +329,20 @@ BEGIN
     END LOOP;
 END $$;
 
--- 12. 生成舉報假資料（生成 200 筆）
+-- 12. 生成舉報假資料（生成 100 筆，隨機實際 user/posting）
 DO $$
 DECLARE
     i INT;
-    posting_count INT;
-    user_count INT;
     random_posting_id INT;
     random_reporter_id INT;
 BEGIN
-    SELECT COUNT(*) INTO posting_count FROM posting;
-    SELECT COUNT(*) INTO user_count FROM "user";
-    
-    FOR i IN 1..200 LOOP
-        random_posting_id := floor(random() * posting_count + 1)::INT;
-        random_reporter_id := floor(random() * user_count + 1)::INT;
+    FOR i IN 1..100 LOOP
+        SELECT p_id INTO random_posting_id FROM posting ORDER BY random() LIMIT 1;
+        SELECT u_id INTO random_reporter_id FROM "user" ORDER BY random() LIMIT 1;
+
+        IF random_posting_id IS NULL OR random_reporter_id IS NULL THEN
+            CONTINUE;
+        END IF;
         
         INSERT INTO report (reporter_id, p_id, reason, status, created_at)
         VALUES (
