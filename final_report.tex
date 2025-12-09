@@ -413,7 +413,7 @@ BCNF。
     對應的 SQL 指令如下。系統會在 \texttt{posting} 資料表新增一筆刊登紀錄，
     初始狀態 \texttt{status} 設為 \texttt{'listed'} 代表可供購買。
 
-\begin{verbatim}
+    \begin{lstlisting}[language=SQL]
 INSERT INTO posting (u_id, title, description, price, status,
                      class_id, course_id)
 VALUES (10,
@@ -424,18 +424,18 @@ VALUES (10,
         2,
         15)
 RETURNING p_id;
-\end{verbatim}
+\end{lstlisting}
 
     透過 PostgreSQL 的 \texttt{RETURNING} 子句，系統可以立即取得新建立的
     \texttt{p\_id}，後續若需要再為該刊登新增多張圖片，便能將此編號插入
     \texttt{posting\_images} 資料表中。
 
-\begin{verbatim}
+    \begin{lstlisting}[language=SQL]
 INSERT INTO posting_images (p_id, image_url, display_order)
 VALUES (/* 上一步取得的 p_id */, 
         'https://example.com/images/book1.jpg',
         1);
-\end{verbatim}
+\end{lstlisting}
 
     \item \textbf{搜尋可購買的書籍：依課程名稱與價格篩選刊登}\\
     使用者在前端可以輸入關鍵字、選擇課程或分類，來查詢目前可購買的刊登。
@@ -444,7 +444,7 @@ VALUES (/* 上一步取得的 p_id */,
     對應的 SQL 指令如下。系統會回傳符合條件的刊登資訊，包含課程名稱、
     分類名稱與賣家帳號：
 
-\begin{verbatim}
+    \begin{lstlisting}[language=SQL]
 SELECT p.p_id,
        p.title,
        p.price,
@@ -460,7 +460,7 @@ WHERE p.status = 'listed'
   AND co.course_name ILIKE '%資料庫%'
   AND p.price BETWEEN 0 AND 500
 ORDER BY p.created_at DESC;
-\end{verbatim}
+\end{lstlisting}
 
     此查詢會利用我們在 \texttt{posting(status)}、\texttt{posting(price)}、
     \texttt{course(course\_id)} 等欄位上建立的索引，降低掃描資料表的成本。
@@ -468,13 +468,13 @@ ORDER BY p.created_at DESC;
     若使用者改以關鍵字搜尋書名／描述，我們則會使用 PostgreSQL 全文搜尋，
     對應到資料庫中以 \texttt{GIN} 索引加速的 \texttt{to\_tsvector} 欄位：
 
-\begin{verbatim}
+    \begin{lstlisting}[language=SQL]
 SELECT p.p_id, p.title, p.price, p.status
 FROM posting AS p
 WHERE p.status = 'listed'
   AND to_tsvector('english', p.title || ' ' || COALESCE(p.description, ''))
       @@ plainto_tsquery('english', 'database');
-\end{verbatim}
+\end{lstlisting}
 
     \item \textbf{將刊登加入收藏清單：新增收藏紀錄}\\
     若要實現「加入收藏」功能，假設情境為：
@@ -482,10 +482,10 @@ WHERE p.status = 'listed'
     對應的 SQL 指令如下。系統會在 \texttt{favorite\_posts} 資料表中新增一筆紀錄，
     若日後再次查詢收藏清單，即可快速找到這筆刊登。
 
-\begin{verbatim}
+    \begin{lstlisting}[language=SQL]
 INSERT INTO favorite_posts (u_id, p_id)
 VALUES (10, 123);
-\end{verbatim}
+\end{lstlisting}
 
     \item \textbf{購買書籍：呼叫交易函數 \texttt{purchase\_book}}\\
     當使用者決定購買某本書時，前端會將買家代號與刊登編號送往後端，
@@ -493,9 +493,9 @@ VALUES (10, 123);
     假設情境為：「使用者 \texttt{u\_id = 10} 想購買刊登 \texttt{p\_id = 123} 的書籍。」\\
     對應的 SQL 呼叫如下：
 
-\begin{verbatim}
+    \begin{lstlisting}[language=SQL]
 SELECT purchase_book(10, 123);
-\end{verbatim}
+\end{lstlisting}
 
     此函數內部會依序檢查刊登是否存在、狀態是否為 \texttt{'listed'}、
     買家餘額是否足夠、是否為自己購買自己的商品，並在同一個交易中
@@ -507,10 +507,10 @@ SELECT purchase_book(10, 123);
     「使用者 \texttt{u\_id = 10} 想在刊登 \texttt{p\_id = 123} 底下留言『請問可以在總圖面交嗎？』。」\\
     對應的 SQL 指令如下：
 
-\begin{verbatim}
+    \begin{lstlisting}[language=SQL]
 INSERT INTO comment (p_id, u_id, content)
 VALUES (123, 10, '請問可以在總圖面交嗎？');
-\end{verbatim}
+\end{lstlisting}
 
     系統會自動記錄留言時間 \texttt{created\_at}，後續在刊登頁面讀取留言時，
     會依照時間排序顯示。
@@ -521,10 +521,10 @@ VALUES (123, 10, '請問可以在總圖面交嗎？');
     假設情境為：「使用者 \texttt{u\_id = 10} 想私訊刊登的賣家 \texttt{u\_id = 25}。」\\
     對應的 SQL 指令如下：
 
-\begin{verbatim}
+    \begin{lstlisting}[language=SQL]
 INSERT INTO message (sender_id, receiver_id, content)
 VALUES (10, 25, '您好，請問這本書還在嗎？可以約下週一面交嗎？');
-\end{verbatim}
+\end{lstlisting}
 
     當訊息送出後，前端會根據 \texttt{is\_read} 欄位顯示未讀提示，
     並透過索引 \texttt{idx\_message\_receiver\_id} 與 \texttt{idx\_message\_is\_read}
@@ -540,7 +540,7 @@ VALUES (10, 25, '您好，請問這本書還在嗎？可以約下週一面交嗎
     屬於『資訊管理學系』且歸類在『必修』這個分類中。」\\
     對應的 SQL 指令如下。首先新增系所與分類（若尚未存在），再新增課程：
 
-\begin{verbatim}
+    \begin{lstlisting}[language=SQL]
 INSERT INTO department (dept_name)
 VALUES ('資訊管理學系');
 
@@ -549,15 +549,15 @@ VALUES ('必修', '系上必修課程');
 
 INSERT INTO course (course_code, course_name, dept_id, class_id)
 VALUES ('IM3001', '資料庫管理', 1, 1);
-\end{verbatim}
+\end{lstlisting}
 
     若日後需要修改課程代碼或名稱，管理員可以使用 \texttt{UPDATE} 指令：
 
-\begin{verbatim}
+    \begin{lstlisting}[language=SQL]
 UPDATE course
 SET course_name = '資料庫管理（含實作）'
 WHERE course_id = 1;
-\end{verbatim}
+\end{lstlisting}
 
     \item \textbf{處理舉報：審核留言／刊登／逃單舉報}\\
     當使用者發現不當內容或交易糾紛時，可以透過 \texttt{report} 資料表送出舉報。
@@ -566,13 +566,13 @@ WHERE course_id = 1;
     「管理員 \texttt{u\_id = 1} 審核編號為 50 的舉報，決定通過此舉報。」\\
     對應的 SQL 指令如下：
 
-\begin{verbatim}
+    \begin{lstlisting}[language=SQL]
 UPDATE report
 SET status      = 'approved',
     reviewed_by = 1,
     reviewed_at = CURRENT_TIMESTAMP
 WHERE report_id = 50;
-\end{verbatim}
+\end{lstlisting}
 
     當舉報被標記為 \texttt{'approved'} 時，觸發器 \texttt{update\_violation\_count}
     會根據舉報類型（刊登、留言或逃單）自動找到對應的目標使用者，
@@ -586,11 +586,11 @@ WHERE report_id = 50;
     刊登數量、售出數量、購買金額、總收入、平均評分與收藏數等指標。
     若管理員想查詢 \texttt{u\_id = 10} 的統計資訊，對應的 SQL 指令如下：
 
-\begin{verbatim}
+    \begin{lstlisting}[language=SQL]
 SELECT *
 FROM v_user_statistics
 WHERE u_id = 10;
-\end{verbatim}
+\end{lstlisting}
 
     此視圖將 \texttt{"user"}、\texttt{posting}、\texttt{orders}、
     \texttt{review} 與 \texttt{favorite\_posts} 等多個資料表的資訊整合在一起，
@@ -603,21 +603,21 @@ WHERE u_id = 10;
     \texttt{v\_class\_statistics} 等視圖。若管理員想查詢目前收藏數較多的熱門書籍，
     對應的 SQL 指令如下：
 
-\begin{verbatim}
+\begin{lstlisting}[language=SQL]
 SELECT *
 FROM v_popular_books
 WHERE favorite_count >= 5
 ORDER BY favorite_count DESC, comment_count DESC;
-\end{verbatim}
+\end{lstlisting}
 
     若要觀察特定課程（例如 \texttt{IM3001} 資料庫管理）的整體交易狀況，
     則可使用下列查詢：
 
-\begin{verbatim}
+\begin{lstlisting}[language=SQL]
 SELECT *
 FROM v_course_statistics
 WHERE course_code = 'IM3001';
-\end{verbatim}
+\end{lstlisting}
 
     藉由這些彙總視圖，管理員可以了解哪些課程或分類上的二手書需求特別高，
     作為未來功能優化與行銷活動的依據。
@@ -636,9 +636,9 @@ WHERE course_code = 'IM3001';
     作為被評價者（\texttt{target\_id}）時，其所有評分的平均值。
     假設系統需要取得 \texttt{u\_id = 10} 的平均評分，對應的 SQL 呼叫如下：
 
-\begin{verbatim}
+\begin{lstlisting}[language=SQL]
 SELECT calculate_user_rating(10);
-\end{verbatim}
+\end{lstlisting}
 
     此函數會忽略尚未有評分的情況（回傳 0），並將結果四捨五入至小數點後兩位，
     方便直接顯示在前端介面上。
@@ -648,9 +648,9 @@ SELECT calculate_user_rating(10);
     其中包含使用者售出的書籍數量、總收入、目前上架中的刊登數量，以及平均評分等資訊。
     假設系統想取得 \texttt{u\_id = 10} 的銷售統計，對應的 SQL 呼叫如下：
 
-\begin{verbatim}
+\begin{lstlisting}[language=SQL]
 SELECT get_user_sales_stats(10);
-\end{verbatim}
+\end{lstlisting}
 
     這個函數主要用於後台儀表板與使用者個人頁面，讓前端可以一次取得多個統計欄位，
     減少與資料庫往返的次數。
@@ -662,7 +662,7 @@ SELECT get_user_sales_stats(10);
     \texttt{update\_posting\_status\_on\_order} 與
     \texttt{record\_transaction\_on\_order} 會自動執行下列 SQL 片段：
 
-\begin{verbatim}
+\begin{lstlisting}[language=SQL]
 -- 1. 將對應的刊登狀態改為 sold
 UPDATE posting
 SET status    = 'sold',
@@ -675,7 +675,7 @@ VALUES (NEW.buyer_id, -NEW.deal_price, 'payment');  -- 買家付款
 
 INSERT INTO transaction_record (u_id, amount, trans_type)
 VALUES (seller_id, NEW.deal_price, 'income');       -- 賣家收入
-\end{verbatim}
+\end{lstlisting}
 
     如此一來，即使應用程式端只需插入或更新一筆訂單紀錄，資料庫也能自動確保
     刊登狀態與金流紀錄保持一致，避免出現「訂單完成但金流未記錄」或
