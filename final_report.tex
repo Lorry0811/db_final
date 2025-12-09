@@ -171,6 +171,11 @@ BCNF。
 
 
 \subsection{重要功能及對應的 SQL 指令}
+\subsubsection{給 User 的功能}
+
+\subsubsection{給 Admin 的功能}
+
+\subsubsection{系統級指令}
 \subsection{SQL 指令效能優化與索引建立分析}
 \subsubsection{User 表索引}
 我們觀察到系統中最頻繁的操作之一是與使用者相關的查詢，例如登入驗證、判斷帳號是否為管理員、篩選遭封鎖的用戶等。由於 email 與 username 是辨識使用者身分的重要欄位，且在註冊、登入與權限驗證流程中會被大量使用，因此若每次查詢都需在資料表逐筆比對，勢必造成效能負擔。
