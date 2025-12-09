@@ -13,6 +13,9 @@
 % 引入 hyperref 套件
 \usepackage{hyperref}
 \usepackage{tabularx}
+\usepackage{tikz}
+\usetikzlibrary{positioning,fit}
+
 
 \usepackage{listings}
 \usepackage{xcolor}
@@ -117,7 +120,14 @@ ERD中可能有部分不符合normalization的設計，這些會在2.2節解決�
 
 
 \subsection{Relational Database Schema Diagram}
-Relational Database Schema Diagram 中總共有7個table，分別是 \texttt{user} (使用者)、\texttt{posting} (貼文)、\texttt{comment} (留言)、\texttt{class} (貼文類別)、\texttt{course} (課程)、\texttt{favorite\_posts} (收藏貼文) 和 \texttt{report} (舉報)。如下圖 Figure 2 所示。
+Relational Database Schema Diagram 中總共有7個table，分別是 \texttt{user} (使用者)、\texttt{posting} (貼文)、\texttt{comment} (留言)、\texttt{class} (貼文類別)、\texttt{course} (課程)、\texttt{favorite\_posts} (收藏貼文) 和 \texttt{report} (舉報)。如下圖 Figure 1 所示。
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.6\textwidth]{images/relational_schema.png}
+    \caption{Relational Database Schema Design}
+    \label{fig:relational_schema}
+\end{figure}
 
 
 \subsection{Data Dictionary}
@@ -894,7 +904,6 @@ CREATE INDEX IF NOT EXISTS idx_course_code ON course(course_code);
 這次的資料庫專案的規模應該是進大學以來我遇過最大的，牽涉到的觀念也是最多的，從ERD、正規化，到交易管理、並行控制，甚至最後的Join Algorithm 和NoSQL，這些單獨拿出來都是相當有挑戰性的主題，但在這個專案中我們要把它們融合並實作出來，是一件不簡單的事。一開始的主題發想還算順利，想到主題後就是設計ERD，想data dictionary，交上去之後助教給的回饋讓我發現原來還有很多我沒有想到的部分，補上後整個系統的確更完善了。實作應該是最難的點，多虧組員們的能力十分優秀，讓我在系統實作上並沒有花費太多功夫，可以專心撰寫最後的報告。撰寫報告讓我更理解整個專案的架構、課上教的知識如何在實務上串連起來，每個slide上的規定都有其必要性，這種把所學應用的感覺真好。很感謝授課的教授、給我們建議的助教，以及我的兩位組員，讓我能夠有這樣一個愉快地做專案的經驗。
 
 \subsection{資管三 B12705057 陳以倫}
-
 
 
 
