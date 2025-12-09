@@ -12,6 +12,7 @@
 \usepackage{array}
 % 引入 hyperref 套件
 \usepackage{hyperref}
+\usepackage{tabularx}
 
 \usepackage{listings}
 \usepackage{xcolor}
@@ -43,9 +44,12 @@
 
 % --- 基本文件資訊 ---
 \title{114-1 資料庫管理\ 期末專案完整報告}
-\author{資管三 B11705061 羅立宸 \and
-        資管三 B12705011 黃元翔 \and
-        資管三 B12705057 陳以倫}
+\author{
+第十組 \\[6pt]
+資管三 B11705061 羅立宸 \\
+資管三 B12705011 黃元翔 \\
+資管三 B12705057 陳以倫
+}
 \date{Dec. 2025} % \today 會自動抓今天的日期
 
 
@@ -118,6 +122,29 @@ Relational Database Schema Diagram 中總共有7個table，分別是 \texttt{use
 
 \subsection{Data Dictionary}
 資料表共有Relational Database Schema Diagram 所示的七個，各個資料表的欄位相關資訊依序呈現在表 1到表 7。
+
+\begin{table}[H]
+    \centering
+    \renewcommand{\arraystretch}{1.1}     % 行距稍微放大一點點就好
+    \setlength{\tabcolsep}{3pt}           % 欄與欄之間縮小
+    \footnotesize                         % 字小一號
+    \begin{tabular}{p{2.1cm} p{2.6cm} p{2.4cm} p{0.9cm} p{3.1cm} p{3.6cm}}
+    \hline
+    Column Name & Meaning & Data Type & Key & Constraint & Domain \\
+    \hline
+    u\_id          & 使用者編號       & INT UNSIGNED   & PK & Not Null, Auto\_Increment & 正整數流水號 \\
+    is\_admin      & 是否為管理者     & TINYINT(1)     &    & Not Null, Default 0       & \{0：一般使用者，1：管理者\} \\
+    user\_name     & 使用者名稱       & VARCHAR(50)    &    & Not Null, Unique          &  \\
+    email          & 電子郵件         & VARCHAR(100)   &    & Not Null, Unique          & 符合 Email 格式 \\
+    password       & 密碼             & VARCHAR(8)     &    & Not Null                  & 登入用密碼 \\
+    status         & 使用者帳號狀態   & ENUM(...)      &    & Not Null, Default 'normal'& \{'normal','banned'\} \\
+    violation\_cnt & 違規次數         & INT UNSIGNED   &    & Not Null, Default 0       & 達一定次數自動停權 \\
+    balance        & 錢包餘額         & INT            &    & Not Null, Default 0       & 單位：元，新台幣 \\
+    \hline
+    \end{tabular}
+    \caption{資料表 USER 的欄位資訊}
+    \end{table}
+     
 
 
 \subsection{正規化分析}
@@ -679,4 +706,22 @@ CREATE INDEX IF NOT EXISTS idx_course_code ON course(course_code);
 \subsection{資管三 B12705011 黃元翔}
 
 \subsection{資管三 B12705057 陳以倫}
+
+
+
+\begin{table}[H]
+    \centering
+    \renewcommand{\arraystretch}{1.3}
+    \begin{tabular}{l l l l l l}
+    \hline
+    Column Name & Meaning & Data Type & Key & Constraint & Domain \\
+    \hline
+    User\_id   & 使用者代號 & bigint       & PK & Not Null         & AUTO\_INCREMENT \\
+    User\_name & 使用者名稱 & varchar (50) &    & Not Null         &                  \\
+    Password   & 使用者密碼 & varchar (15) &    & Not Null         &                  \\
+    Email      & 使用者信箱 & varchar (50) &    & Not Null, Unique &                  \\
+    \hline
+    \end{tabular}
+    \caption{表 1：資料表 USER 的欄位資訊}
+    \end{table}
 \end{document}
