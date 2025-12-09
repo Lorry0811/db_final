@@ -171,11 +171,293 @@ BCNF。
 
 
 \subsection{重要功能及對應的 SQL 指令}
+
+在第 1.1 節中，我們介紹了 BookSwap 平台提供給一般使用者（User）與管理員（Admin）
+的主要功能，以及系統在背景中自動執行的一些維護操作。本小節將以具體情境為例，
+說明這些功能在實作上對應到的 SQL 指令或資料庫函數呼叫。第 3.2.1 小節聚焦於
+給一般使用者使用的功能，第 3.2.2 小節則說明管理員相關的查詢與維護操作，
+最後第 3.2.3 小節則整理由系統本身運行的「系統級指令」。
+
 \subsubsection{給 User 的功能}
+
+\begin{enumerate}
+    \item \textbf{刊登二手書：新增一筆商品刊登}\\
+    若要實現「刊登二手書」功能，假設情境為：
+    「使用者代號 \texttt{u\_id} 為 10 的學生，想刊登一本標題為
+    『資料庫管理（第 3 版）』的教科書，售價 \texttt{price} 為 450 元，
+    並指定分類 \texttt{class\_id} 為 2、對應課程 \texttt{course\_id} 為 15。」\\
+    對應的 SQL 指令如下。系統會在 \texttt{posting} 資料表新增一筆刊登紀錄，
+    初始狀態 \texttt{status} 設為 \texttt{'listed'} 代表可供購買。
+
+\begin{verbatim}
+INSERT INTO posting (u_id, title, description, price, status,
+                     class_id, course_id)
+VALUES (10,
+        '資料庫管理（第 3 版）',
+        '九成新，書內有少量筆記，可面交',
+        450,
+        'listed',
+        2,
+        15)
+RETURNING p_id;
+\end{verbatim}
+
+    透過 PostgreSQL 的 \texttt{RETURNING} 子句，系統可以立即取得新建立的
+    \texttt{p\_id}，後續若需要再為該刊登新增多張圖片，便能將此編號插入
+    \texttt{posting\_images} 資料表中。
+
+\begin{verbatim}
+INSERT INTO posting_images (p_id, image_url, display_order)
+VALUES (/* 上一步取得的 p_id */, 
+        'https://example.com/images/book1.jpg',
+        1);
+\end{verbatim}
+
+    \item \textbf{搜尋可購買的書籍：依課程名稱與價格篩選刊登}\\
+    使用者在前端可以輸入關鍵字、選擇課程或分類，來查詢目前可購買的刊登。
+    假設情境為：「使用者想查詢課程名稱內含『資料庫』，並且價格介於
+    0 到 500 元之間，且商品狀態為可購買（\texttt{listed}）的刊登。」\\
+    對應的 SQL 指令如下。系統會回傳符合條件的刊登資訊，包含課程名稱、
+    分類名稱與賣家帳號：
+
+\begin{verbatim}
+SELECT p.p_id,
+       p.title,
+       p.price,
+       p.status,
+       u.username      AS seller_username,
+       co.course_name,
+       cl.class_name
+FROM posting AS p
+JOIN "user" AS u   ON p.u_id = u.u_id
+LEFT JOIN course AS co ON p.course_id = co.course_id
+LEFT JOIN class  AS cl ON p.class_id = cl.class_id
+WHERE p.status = 'listed'
+  AND co.course_name ILIKE '%資料庫%'
+  AND p.price BETWEEN 0 AND 500
+ORDER BY p.created_at DESC;
+\end{verbatim}
+
+    此查詢會利用我們在 \texttt{posting(status)}、\texttt{posting(price)}、
+    \texttt{course(course\_id)} 等欄位上建立的索引，降低掃描資料表的成本。
+
+    若使用者改以關鍵字搜尋書名／描述，我們則會使用 PostgreSQL 全文搜尋，
+    對應到資料庫中以 \texttt{GIN} 索引加速的 \texttt{to\_tsvector} 欄位：
+
+\begin{verbatim}
+SELECT p.p_id, p.title, p.price, p.status
+FROM posting AS p
+WHERE p.status = 'listed'
+  AND to_tsvector('english', p.title || ' ' || COALESCE(p.description, ''))
+      @@ plainto_tsquery('english', 'database');
+\end{verbatim}
+
+    \item \textbf{將刊登加入收藏清單：新增收藏紀錄}\\
+    若要實現「加入收藏」功能，假設情境為：
+    「使用者代號 \texttt{u\_id} 為 10，想把刊登編號 \texttt{p\_id} 為 123 的書籍加入收藏。」\\
+    對應的 SQL 指令如下。系統會在 \texttt{favorite\_posts} 資料表中新增一筆紀錄，
+    若日後再次查詢收藏清單，即可快速找到這筆刊登。
+
+\begin{verbatim}
+INSERT INTO favorite_posts (u_id, p_id)
+VALUES (10, 123);
+\end{verbatim}
+
+    \item \textbf{購買書籍：呼叫交易函數 \texttt{purchase\_book}}\\
+    當使用者決定購買某本書時，前端會將買家代號與刊登編號送往後端，
+    由後端透過 PostgreSQL 的 PL/pgSQL 函數 \texttt{purchase\_book} 執行完整的交易流程。
+    假設情境為：「使用者 \texttt{u\_id = 10} 想購買刊登 \texttt{p\_id = 123} 的書籍。」\\
+    對應的 SQL 呼叫如下：
+
+\begin{verbatim}
+SELECT purchase_book(10, 123);
+\end{verbatim}
+
+    此函數內部會依序檢查刊登是否存在、狀態是否為 \texttt{'listed'}、
+    買家餘額是否足夠、是否為自己購買自己的商品，並在同一個交易中
+    同步完成扣款、入帳、更新刊登狀態與建立訂單，確保購買流程具有 ACID 特性。
+
+    \item \textbf{在刊登底下留言：新增公開留言}\\
+    為了讓買家可以在刊登底下詢問細節（例如是否可面交、是否有畫線），
+    我們提供「公開留言」功能。假設情境為：
+    「使用者 \texttt{u\_id = 10} 想在刊登 \texttt{p\_id = 123} 底下留言『請問可以在總圖面交嗎？』。」\\
+    對應的 SQL 指令如下：
+
+\begin{verbatim}
+INSERT INTO comment (p_id, u_id, content)
+VALUES (123, 10, '請問可以在總圖面交嗎？');
+\end{verbatim}
+
+    系統會自動記錄留言時間 \texttt{created\_at}，後續在刊登頁面讀取留言時，
+    會依照時間排序顯示。
+
+    \item \textbf{傳送私訊：建立一則一對一訊息}\\
+    若買家與賣家希望進一步溝通（例如交換 Line、約定面交時間），
+    系統會透過 \texttt{message} 資料表記錄雙方的一對一訊息。
+    假設情境為：「使用者 \texttt{u\_id = 10} 想私訊刊登的賣家 \texttt{u\_id = 25}。」\\
+    對應的 SQL 指令如下：
+
+\begin{verbatim}
+INSERT INTO message (sender_id, receiver_id, content)
+VALUES (10, 25, '您好，請問這本書還在嗎？可以約下週一面交嗎？');
+\end{verbatim}
+
+    當訊息送出後，前端會根據 \texttt{is\_read} 欄位顯示未讀提示，
+    並透過索引 \texttt{idx\_message\_receiver\_id} 與 \texttt{idx\_message\_is\_read}
+    加速收件匣查詢。
+\end{enumerate}
 
 \subsubsection{給 Admin 的功能}
 
+\begin{enumerate}
+    \item \textbf{管理課程與分類（增刪改查）}\\
+    管理員可以維護系上課程、系所與分類資訊，讓刊登可以正確對應到實際課程。
+    假設情境為：「管理員想新增一門課程『資料庫管理』，
+    屬於『資訊管理學系』且歸類在『必修』這個分類中。」\\
+    對應的 SQL 指令如下。首先新增系所與分類（若尚未存在），再新增課程：
+
+\begin{verbatim}
+INSERT INTO department (dept_name)
+VALUES ('資訊管理學系');
+
+INSERT INTO class (class_name, description)
+VALUES ('必修', '系上必修課程');
+
+INSERT INTO course (course_code, course_name, dept_id, class_id)
+VALUES ('IM3001', '資料庫管理', 1, 1);
+\end{verbatim}
+
+    若日後需要修改課程代碼或名稱，管理員可以使用 \texttt{UPDATE} 指令：
+
+\begin{verbatim}
+UPDATE course
+SET course_name = '資料庫管理（含實作）'
+WHERE course_id = 1;
+\end{verbatim}
+
+    \item \textbf{處理舉報：審核留言／刊登／逃單舉報}\\
+    當使用者發現不當內容或交易糾紛時，可以透過 \texttt{report} 資料表送出舉報。
+    管理員在後台審核時，會將狀態從 \texttt{'pending'} 更新為
+    \texttt{'approved'} 或 \texttt{'rejected'}。假設情境為：
+    「管理員 \texttt{u\_id = 1} 審核編號為 50 的舉報，決定通過此舉報。」\\
+    對應的 SQL 指令如下：
+
+\begin{verbatim}
+UPDATE report
+SET status      = 'approved',
+    reviewed_by = 1,
+    reviewed_at = CURRENT_TIMESTAMP
+WHERE report_id = 50;
+\end{verbatim}
+
+    當舉報被標記為 \texttt{'approved'} 時，觸發器 \texttt{update\_violation\_count}
+    會根據舉報類型（刊登、留言或逃單）自動找到對應的目標使用者，
+    並將其 \texttt{violation\_count} 加一；當違規次數累積到三次，
+    另一個觸發器 \texttt{auto\_block\_user} 會自動將該帳號的
+    \texttt{is\_blocked} 欄位設為 \texttt{TRUE}，達到半自動的風紀管理效果。
+
+    \item \textbf{查詢使用者整體表現與風險狀態}\\
+    為了讓管理員能快速掌握每位使用者在平台上的活動概況，
+    我們在資料庫中建立視圖 \texttt{v\_user\_statistics}，整理了
+    刊登數量、售出數量、購買金額、總收入、平均評分與收藏數等指標。
+    若管理員想查詢 \texttt{u\_id = 10} 的統計資訊，對應的 SQL 指令如下：
+
+\begin{verbatim}
+SELECT *
+FROM v_user_statistics
+WHERE u_id = 10;
+\end{verbatim}
+
+    此視圖將 \texttt{"user"}、\texttt{posting}、\texttt{orders}、
+    \texttt{review} 與 \texttt{favorite\_posts} 等多個資料表的資訊整合在一起，
+    管理員只需一個查詢即可檢視使用者是否為高風險對象（例如違規次數偏高、
+    評價過低或逃單紀錄較多）。
+
+    \item \textbf{查詢熱門書籍與課程統計}\\
+    為了協助平台調整推薦策略與營運方向，我們另外建立了
+    \texttt{v\_popular\_books}、\texttt{v\_course\_statistics}、
+    \texttt{v\_class\_statistics} 等視圖。若管理員想查詢目前收藏數較多的熱門書籍，
+    對應的 SQL 指令如下：
+
+\begin{verbatim}
+SELECT *
+FROM v_popular_books
+WHERE favorite_count >= 5
+ORDER BY favorite_count DESC, comment_count DESC;
+\end{verbatim}
+
+    若要觀察特定課程（例如 \texttt{IM3001} 資料庫管理）的整體交易狀況，
+    則可使用下列查詢：
+
+\begin{verbatim}
+SELECT *
+FROM v_course_statistics
+WHERE course_code = 'IM3001';
+\end{verbatim}
+
+    藉由這些彙總視圖，管理員可以了解哪些課程或分類上的二手書需求特別高，
+    作為未來功能優化與行銷活動的依據。
+\end{enumerate}
+
 \subsubsection{系統級指令}
+
+除了由使用者或管理員直接觸發的操作外，BookSwap 也在資料庫端設計了多個
+「系統級」的 SQL 函數與觸發器，用來在背景中維護金流紀錄與帳號風紀，
+避免出現資料不一致的情況。
+
+\begin{enumerate}
+    \item \textbf{計算使用者平均評分：\texttt{calculate\_user\_rating}}\\
+    為了在使用者頁面顯示賣家的整體評價，我們在資料庫中實作了
+    \texttt{calculate\_user\_rating(p\_user\_id INT)} 函數，用來計算指定使用者
+    作為被評價者（\texttt{target\_id}）時，其所有評分的平均值。
+    假設系統需要取得 \texttt{u\_id = 10} 的平均評分，對應的 SQL 呼叫如下：
+
+\begin{verbatim}
+SELECT calculate_user_rating(10);
+\end{verbatim}
+
+    此函數會忽略尚未有評分的情況（回傳 0），並將結果四捨五入至小數點後兩位，
+    方便直接顯示在前端介面上。
+
+    \item \textbf{取得使用者銷售統計：\texttt{get\_user\_sales\_stats}}\\
+    另一個系統級函數 \texttt{get\_user\_sales\_stats(p\_user\_id INT)} 則會回傳一個 JSON，
+    其中包含使用者售出的書籍數量、總收入、目前上架中的刊登數量，以及平均評分等資訊。
+    假設系統想取得 \texttt{u\_id = 10} 的銷售統計，對應的 SQL 呼叫如下：
+
+\begin{verbatim}
+SELECT get_user_sales_stats(10);
+\end{verbatim}
+
+    這個函數主要用於後台儀表板與使用者個人頁面，讓前端可以一次取得多個統計欄位，
+    減少與資料庫往返的次數。
+
+    \item \textbf{訂單完成時自動更新刊登狀態與金流紀錄}\\
+    在第 3.4 節中我們已詳細說明購買流程的交易管理。這裡補充說明與之對應的
+    系統級指令：當 \texttt{orders} 資料表中新增或更新一筆訂單，
+    且其狀態為 \texttt{'completed'} 時，觸發器
+    \texttt{update\_posting\_status\_on\_order} 與
+    \texttt{record\_transaction\_on\_order} 會自動執行下列 SQL 片段：
+
+\begin{verbatim}
+-- 1. 將對應的刊登狀態改為 sold
+UPDATE posting
+SET status    = 'sold',
+    updated_at = CURRENT_TIMESTAMP
+WHERE p_id = NEW.p_id AND status = 'listed';
+
+-- 2. 在 transaction_record 中新增兩筆金流紀錄
+INSERT INTO transaction_record (u_id, amount, trans_type)
+VALUES (NEW.buyer_id, -NEW.deal_price, 'payment');  -- 買家付款
+
+INSERT INTO transaction_record (u_id, amount, trans_type)
+VALUES (seller_id, NEW.deal_price, 'income');       -- 賣家收入
+\end{verbatim}
+
+    如此一來，即使應用程式端只需插入或更新一筆訂單紀錄，資料庫也能自動確保
+    刊登狀態與金流紀錄保持一致，避免出現「訂單完成但金流未記錄」或
+    「金流有紀錄但刊登仍顯示可購買」等不一致情況。
+\end{enumerate}
+
 \subsection{SQL 指令效能優化與索引建立分析}
 \subsubsection{User 表索引}
 我們觀察到系統中最頻繁的操作之一是與使用者相關的查詢，例如登入驗證、判斷帳號是否為管理員、篩選遭封鎖的用戶等。由於 email 與 username 是辨識使用者身分的重要欄位，且在註冊、登入與權限驗證流程中會被大量使用，因此若每次查詢都需在資料表逐筆比對，勢必造成效能負擔。
